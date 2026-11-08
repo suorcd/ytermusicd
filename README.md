@@ -1,5 +1,10 @@
 # YTerMusic
 
+> **Work in progress:** `ytermusicd` is a fork of
+> [ytermusic](https://github.com/ccgauche/ytermusic) adding a headless daemon,
+> web UI, MPRIS and MCP. The upstream TUI documentation below still describes
+> the existing client.
+
 ![YTeRMUSiC](./assets/banner/YTeRMUSiC.png "YTeRMUSiC")
 
 YTerMusic is a TUI based Youtube Music Player that aims to be as fast and simple as possible.
