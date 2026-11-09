@@ -125,6 +125,20 @@ If you need to report an issue or find the files related to ytermusic:
 ytermusic --files
 ```
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/testing.md](docs/testing.md).
+
+```sh
+nix develop
+just check
+just test
+```
+
+Bug fixes and behavior changes require a test that fails before the fix and
+passes after it. If a deterministic test is impractical, document the manual
+reproduction and add the closest smoke test.
+
 ## Changelog
 
 ```

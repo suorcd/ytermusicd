@@ -90,3 +90,34 @@ impl<T: StringUtils> StringUtils for Option<T> {
         self.as_ref().and_then(|string| string.trim_())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::StringUtils;
+
+    #[test]
+    fn after_finds_suffix() {
+        assert_eq!("Cookie: abc".after("Cookie: "), Some("abc"));
+        assert_eq!("Cookie: abc".after("missing"), None);
+    }
+
+    #[test]
+    fn before_finds_prefix() {
+        assert_eq!("Cookie: abc".before(": "), Some("Cookie"));
+        assert_eq!("Cookie: abc".before("missing"), None);
+    }
+
+    #[test]
+    fn between_finds_inner() {
+        assert_eq!("SAPISID=value;".between("SAPISID=", ";"), Some("value"));
+        assert_eq!("SAPISID=value;".between("missing", ";"), None);
+    }
+
+    #[test]
+    fn option_helpers_delegate() {
+        let value = Some("42");
+        assert_eq!(value.parse_::<u32>(), Some(42));
+        assert_eq!(value.trim_(), Some("42"));
+        assert_eq!(None::<&str>.after("x"), None);
+    }
+}

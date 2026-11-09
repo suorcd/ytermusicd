@@ -4,6 +4,9 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+#[cfg(test)]
+use std::path::PathBuf;
+
 use json_extractor::{
     extract_playlist_info, from_json, get_continuation, get_playlist, get_playlist_search,
     get_video, get_video_from_album, Continuation,
@@ -26,9 +29,23 @@ pub type Result<T> = std::result::Result<T, YoutubeMusicError>;
 const YTM_DOMAIN: &str = "https://music.youtube.com";
 
 #[cfg(test)]
+fn headers_path() -> PathBuf {
+    std::env::var_os("YTERMUSICD_HEADERS")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../headers.txt"))
+}
+
+#[cfg(test)]
 fn get_headers() -> HeaderMap {
     let mut headers = HeaderMap::new();
-    let file = std::fs::read_to_string("../headers.txt").unwrap();
+    let path = headers_path();
+    let file = std::fs::read_to_string(&path).unwrap_or_else(|e| {
+        panic!(
+            "failed to read headers from {}: {e}\n\
+             set YTERMUSICD_HEADERS or place headers.txt at the repository root",
+            path.display()
+        )
+    });
     for header in file.lines() {
         if header.trim().is_empty() {
             continue;
@@ -51,15 +68,15 @@ fn get_headers() -> HeaderMap {
 
 #[cfg(test)]
 fn get_account_id() -> Option<String> {
-    let file = std::fs::read_to_string("../account_id.txt").unwrap();
-    let account_id = match std::fs::read_to_string(file) {
-        Ok(id) => Some(id),
-        Err(_) => None,
-    };
-    return account_id;
+    let path = headers_path().parent()?.join("account_id.txt");
+    std::fs::read_to_string(path)
+        .ok()
+        .map(|id| id.trim().to_string())
+        .filter(|id| !id.is_empty())
 }
 
 #[test]
+#[ignore = "requires headers.txt and network access"]
 fn advanced_like() {
     use tokio::runtime::Runtime;
     Runtime::new().unwrap().block_on(async {
@@ -71,13 +88,14 @@ fn advanced_like() {
             .get_library(&Endpoint::MusicLibraryLanding, 0)
             .await
             .unwrap();
-        assert_eq!(search.is_empty(), false);
+        assert!(!search.is_empty());
         println!("{:?}", search[1]);
         println!("{:?}", ytm.get_playlist(&search[1], 0).await.unwrap());
     });
 }
 
 #[test]
+#[ignore = "requires headers.txt and network access"]
 fn advanced_test() {
     use tokio::runtime::Runtime;
     Runtime::new().unwrap().block_on(async {
@@ -85,14 +103,15 @@ fn advanced_test() {
             .await
             .unwrap();
         let search = ytm.search("j'ai la danse qui va avec", 0).await.unwrap();
-        assert_eq!(search.videos.is_empty(), false);
-        assert_eq!(search.playlists.is_empty(), false);
+        assert!(!search.videos.is_empty());
+        assert!(!search.playlists.is_empty());
         let playlist_contents = ytm.get_playlist(&search.playlists[1], 0).await.unwrap();
         println!("{:?}", playlist_contents);
     });
 }
 
 #[test]
+#[ignore = "requires headers.txt and network access"]
 fn home_test() {
     use tokio::runtime::Runtime;
     Runtime::new().unwrap().block_on(async {
@@ -101,7 +120,7 @@ fn home_test() {
             .unwrap();
         let search = ytm.get_home(0).await.unwrap();
         println!("{:?}", search.playlists);
-        assert_eq!(search.playlists.is_empty(), false);
+        assert!(!search.playlists.is_empty());
         let playlist_contents = ytm.get_playlist(&search.playlists[0], 0).await.unwrap();
         println!("{:?}", playlist_contents);
     });

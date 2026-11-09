@@ -232,3 +232,119 @@ pub(crate) fn get_video(value: &Value) -> Option<YoutubeMusicVideoRef> {
         duration: String::new(),
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn search_video() -> Value {
+        json!({
+            "videoId": "vid123",
+            "flexColumns": [
+                { "musicResponsiveListItemFlexColumnRenderer": {
+                    "text": { "runs": ["Song"] },
+                    "trackingParams": "a"
+                }},
+                { "musicResponsiveListItemFlexColumnRenderer": {
+                    "text": { "runs": ["Artist"] },
+                    "trackingParams": "b"
+                }},
+                { "musicResponsiveListItemFlexColumnRenderer": {
+                    "text": { "runs": ["Album"] },
+                    "trackingParams": "c"
+                }}
+            ]
+        })
+    }
+
+    fn playlist() -> Value {
+        json!({
+            "title": { "runs": ["My Playlist"] },
+            "subtitle": { "runs": ["Artist"] },
+            "navigationEndpoint": {
+                "browseEndpoint": { "browseId": "VLPL123" }
+            }
+        })
+    }
+
+    #[test]
+    fn extracts_video_from_search_result() {
+        let video = get_video(&search_video()).expect("video");
+        assert_eq!(video.video_id, "vid123");
+        assert_eq!(video.title, "Song");
+        assert_eq!(video.author, "Artist");
+        assert_eq!(video.album, "Album");
+    }
+
+    #[test]
+    fn extracts_playlist() {
+        let playlist = get_playlist(&playlist()).expect("playlist");
+        assert_eq!(playlist.name, "My Playlist");
+        assert_eq!(playlist.subtitle, "Artist");
+        assert_eq!(playlist.browse_id, "VLPL123");
+    }
+
+    #[test]
+    fn extracts_search_playlist() {
+        let value = json!({
+            "navigationEndpoint": {
+                "browseEndpoint": { "browseId": "VLPL456" }
+            },
+            "flexColumns": [
+                { "musicResponsiveListItemFlexColumnRenderer": {
+                    "text": { "runs": ["Search Playlist"] }
+                }},
+                { "musicResponsiveListItemFlexColumnRenderer": {
+                    "text": { "runs": ["Artist"] }
+                }}
+            ]
+        });
+        let playlist = get_playlist_search(&value).expect("playlist");
+        assert_eq!(playlist.name, "Search Playlist");
+        assert_eq!(playlist.subtitle, "Artist");
+        assert_eq!(playlist.browse_id, "VLPL456");
+    }
+
+    #[test]
+    fn extracts_continuation() {
+        let value = json!({
+            "nextContinuationData": {
+                "continuation": "token",
+                "clickTrackingParams": "ctp"
+            }
+        });
+        let continuation = get_continuation(&value).expect("continuation");
+        assert_eq!(continuation.continuation, "token");
+        assert_eq!(continuation.click_tracking_params, "ctp");
+    }
+
+    #[test]
+    fn finds_nested_video_id() {
+        let value = json!({ "a": [{ "b": { "videoId": "nested" } }] });
+        assert_eq!(get_videoid(&value), Some("nested".to_string()));
+        assert_eq!(get_videoid(&json!({ "a": 1 })), None);
+    }
+
+    #[test]
+    fn deduplicates_crawled_values() {
+        let value = json!([playlist(), playlist()]);
+        let playlists = from_json(&value, get_playlist).expect("playlists");
+        assert_eq!(playlists.len(), 1);
+    }
+
+    #[test]
+    fn extracts_album_track() {
+        let value = json!({
+            "playlistItemData": { "videoId": "albumvid" },
+            "flexColumns": [
+                { "musicResponsiveListItemFlexColumnRenderer": {
+                    "text": { "runs": ["Album Song"] }
+                }}
+            ]
+        });
+        let video = get_video_from_album(&value).expect("video");
+        assert_eq!(video.video_id, "albumvid");
+        assert_eq!(video.title, "Album Song");
+    }
+}
