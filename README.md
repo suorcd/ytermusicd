@@ -9,6 +9,27 @@
 
 YTerMusic is a TUI based Youtube Music Player that aims to be as fast and simple as possible.
 
+## ytermusicd CLI (work in progress)
+
+The daemon binary is scaffolded; the HTTP API and MCP proxy arrive in later
+phases.
+
+```sh
+cargo run -p ytermusicd -- --help
+cargo run -p ytermusicd -- serve   # daemon skeleton, Ctrl-C to stop
+cargo run -p ytermusicd -- mcp     # not implemented yet
+```
+
+### Workspace layout
+
+- `crates/ytermusicd` — headless daemon binary (`serve`, `mcp`; in progress)
+- `crates/ytermusic` — legacy TUI client
+- `crates/ytpapi2` — YouTube Music API client
+- `crates/player` — audio playback
+- `crates/database` — local download database
+- `crates/download-manager` — download queue
+- `crates/common-structs` — shared status types
+
 ## Screenshots
 <p>
   <img

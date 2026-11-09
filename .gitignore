@@ -12,3 +12,11 @@ account_id.txt
 last-playlist.json
 muex
 cssparser
+
+# Nix
+/.direnv/
+/result
+
+# Web
+node_modules/
+dist/
