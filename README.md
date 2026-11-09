@@ -88,6 +88,33 @@ YTerMusic is a TUI based Youtube Music Player that aims to be as fast and simple
 - Run `cargo build --release`
 - The executable is in `target/release/ytermusic.exe` or `target/release/ytermusic`
 
+### Development with Nix
+
+The repository includes a `flake.nix` with a reproducible development shell
+(Rust, Node.js, the native libraries, `yt-dlp` and `ffmpeg`):
+
+```sh
+nix develop
+cargo check --workspace
+nix develop -c npm --version
+```
+
+The shell supports x86_64/aarch64 Linux and Apple Silicon macOS. Intel macOS
+is not supported by the current nixpkgs-unstable; use `rustup` and the native
+package manager there.
+
+Once the web crate exists, build it from the shell with:
+
+```sh
+(cd crates/ytermusicd-web && npm ci && npm run build)
+```
+
+Validate the flake with:
+
+```sh
+nix flake check
+```
+
 ## Usage
 
 - Use your mouse to <kbd>click</kbd> in lists if your terminal has mouse support
