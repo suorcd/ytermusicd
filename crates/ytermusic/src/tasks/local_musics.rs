@@ -4,11 +4,11 @@ use rand::seq::SliceRandom;
 use ytpapi2::YoutubeMusicVideoRef;
 
 use crate::{
+    DATABASE,
     consts::{CACHE_DIR, CONFIG},
     run_service,
     structures::performance,
     term::{ManagerMessage, Screens},
-    DATABASE,
 };
 
 pub fn spawn_local_musics_task(updater_s: Sender<ManagerMessage>) {

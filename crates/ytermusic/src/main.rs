@@ -18,7 +18,7 @@ use systems::{logger::init, player::player_system};
 use crate::{
     consts::HEADER_TUTORIAL,
     structures::{media::run_window_handler, sound_action::download_manager_handler},
-    systems::{logger::get_log_file_path, DOWNLOAD_MANAGER},
+    systems::{DOWNLOAD_MANAGER, logger::get_log_file_path},
     utils::get_project_dirs,
 };
 
@@ -31,7 +31,7 @@ mod structures;
 mod systems;
 mod term;
 mod utils;
-pub use shutdown::{is_shutdown_sent, shutdown, ShutdownSignal};
+pub use shutdown::{ShutdownSignal, is_shutdown_sent, shutdown};
 mod tasks;
 
 pub use database::DATABASE;
@@ -230,22 +230,24 @@ async fn app_start_main(updater_r: Receiver<ManagerMessage>, updater_s: Sender<M
             }
             _ => {
                 println!("yt-dlp not found in PATH");
-                println!("get it at https://github.com/yt-dlp/yt-dlp or set downloader = \"rusty_ytdl\" in config");
+                println!(
+                    "get it at https://github.com/yt-dlp/yt-dlp or set downloader = \"rusty_ytdl\" in config"
+                );
                 std::io::stdin().read_line(&mut String::new()).unwrap();
                 return;
             }
         }
     }
 
-    if try_get_cookies().is_none() {
-        if let Err((error, filepath)) = get_header_file() {
-            println!("Can't read or find `{}`", filepath.display());
-            println!("Error: {error}");
-            println!("{HEADER_TUTORIAL}");
-            // prevent console window closing on windows, does nothing on linux
-            std::io::stdin().read_line(&mut String::new()).unwrap();
-            return;
-        }
+    if try_get_cookies().is_none()
+        && let Err((error, filepath)) = get_header_file()
+    {
+        println!("Can't read or find `{}`", filepath.display());
+        println!("Error: {error}");
+        println!("{HEADER_TUTORIAL}");
+        // prevent console window closing on windows, does nothing on linux
+        std::io::stdin().read_line(&mut String::new()).unwrap();
+        return;
     }
 
     STARTUP_TIME.log("Startup");

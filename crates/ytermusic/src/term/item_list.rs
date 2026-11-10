@@ -81,7 +81,7 @@ impl<Action: Clone> ListItem<Action> {
 
     pub fn get_item_frame(&self, height: usize) -> Vec<(usize, &(String, Action))> {
         let height = height.saturating_sub(2); // Remove the borders
-                                               // Add a little offset when the list is full
+        // Add a little offset when the list is full
         let start = self.current_position.saturating_sub(3);
         let length = self.list.len();
         let length_after_start = length.saturating_sub(start);
@@ -100,7 +100,7 @@ impl<Action: Clone> ListItem<Action> {
             .iter()
             .enumerate()
             .find(|(i, _)| *i == y_position)
-            .map(|(_, w)| (w.0, &w.1 .1))
+            .map(|(_, w)| (w.0, &w.1.1))
     }
 
     pub fn select(&self) -> Option<&Action> {

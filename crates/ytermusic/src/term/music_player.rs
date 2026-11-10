@@ -10,13 +10,13 @@ use crate::{
         app_status::{AppStatusExt, MusicDownloadStatusExt},
         sound_action::SoundAction,
     },
-    systems::{player::PlayerState, DOWNLOAD_MANAGER},
+    systems::{DOWNLOAD_MANAGER, player::PlayerState},
     utils::{invert, to_bidi_string},
 };
 
 use super::{
-    rect_contains, relative_pos, split_x, split_y, vertical_gauge::VerticalGauge, EventResponse,
-    ManagerMessage, Screen, Screens,
+    EventResponse, ManagerMessage, Screen, Screens, rect_contains, relative_pos, split_x, split_y,
+    vertical_gauge::VerticalGauge,
 };
 
 impl PlayerState {

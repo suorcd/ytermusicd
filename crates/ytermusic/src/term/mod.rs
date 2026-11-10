@@ -18,10 +18,10 @@ use crossterm::{
         MouseEvent,
     },
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use flume::{Receiver, Sender};
-use ratatui::{backend::CrosstermBackend, layout::Rect, Frame, Terminal};
+use ratatui::{Frame, Terminal, backend::CrosstermBackend, layout::Rect};
 use ytpapi2::YoutubeMusicVideoRef;
 
 use crate::{
