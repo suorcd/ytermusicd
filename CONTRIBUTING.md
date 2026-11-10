@@ -33,3 +33,5 @@ repository.
 
 This project is a fork of [ytermusic](https://github.com/ccgauche/ytermusic).
 Keep generic fixes reusable and call out changes that should be upstreamed.
+See [0004 — upstream strategy](docs/decisions/0004-upstream-strategy.md) for the
+sync procedure and change classification.
