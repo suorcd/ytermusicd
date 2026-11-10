@@ -1,18 +1,18 @@
 use crossterm::event::{KeyCode, KeyEvent};
 use flume::Sender;
-use ratatui::{layout::Rect, style::Style, Frame};
+use ratatui::{Frame, layout::Rect, style::Style};
 use ytpapi2::YoutubeMusicVideoRef;
 
 use crate::{
+    DATABASE,
     consts::CONFIG,
     structures::sound_action::SoundAction,
     utils::{invert, to_bidi_string},
-    DATABASE,
 };
 
 use super::{
-    item_list::{ListItem, ListItemAction},
     EventResponse, ManagerMessage, Screen, Screens,
+    item_list::{ListItem, ListItemAction},
 };
 
 #[derive(Clone)]

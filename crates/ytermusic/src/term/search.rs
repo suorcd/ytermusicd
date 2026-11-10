@@ -4,10 +4,10 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use flume::Sender;
 use log::error;
 use ratatui::{
+    Frame,
     layout::{Alignment, Rect},
     style::Style,
     widgets::{Block, BorderType, Borders, Paragraph},
-    Frame,
 };
 use tokio::task::JoinHandle;
 use ytpapi2::{
@@ -16,19 +16,20 @@ use ytpapi2::{
 };
 
 use crate::{
+    DATABASE, ShutdownSignal,
     consts::CONFIG,
     get_header_file, run_service,
-    structures::sound_action::{download_manager_handler, SoundAction},
+    structures::sound_action::{SoundAction, download_manager_handler},
     systems::DOWNLOAD_MANAGER,
     try_get_cookies,
     utils::{invert, to_bidi_string},
-    ShutdownSignal, DATABASE,
 };
 
 use super::{
+    EventResponse, ManagerMessage, Screen, Screens,
     item_list::{ListItem, ListItemAction},
     playlist::format_playlist,
-    split_y_start, EventResponse, ManagerMessage, Screen, Screens,
+    split_y_start,
 };
 
 pub struct Search {
@@ -52,11 +53,7 @@ impl ListItemAction for Status {
             Self::Unknown(_) => CONFIG.player.text_downloading_style,
             Self::PlayList(_, _) => CONFIG.player.text_next_style,
         };
-        if selected {
-            invert(k)
-        } else {
-            k
-        }
+        if selected { invert(k) } else { k }
     }
 }
 

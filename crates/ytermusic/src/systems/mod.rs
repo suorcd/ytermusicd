@@ -2,9 +2,9 @@ use download_manager::{DownloadManager, Downloader};
 use once_cell::sync::Lazy;
 
 use crate::{
+    DATABASE,
     config::DownloaderConfig,
     consts::{CACHE_DIR, CONFIG},
-    DATABASE,
 };
 
 pub mod logger;

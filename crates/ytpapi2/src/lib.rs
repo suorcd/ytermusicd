@@ -8,8 +8,8 @@ use std::{
 use std::path::PathBuf;
 
 use json_extractor::{
-    extract_playlist_info, from_json, get_continuation, get_playlist, get_playlist_search,
-    get_video, get_video_from_album, Continuation,
+    Continuation, extract_playlist_info, from_json, get_continuation, get_playlist,
+    get_playlist_search, get_video, get_video_from_album,
 };
 use log::{debug, error, trace};
 pub use reqwest::header::HeaderMap;

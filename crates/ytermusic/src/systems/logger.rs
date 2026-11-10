@@ -56,7 +56,7 @@ pub fn init() -> Result<(), SetLoggerError> {
     Ok(())
 }
 
-use log::{info, Level, LevelFilter, Metadata, Record, SetLoggerError};
+use log::{Level, LevelFilter, Metadata, Record, SetLoggerError, info};
 
 use crate::utils::get_project_dirs;
 

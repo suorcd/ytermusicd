@@ -1,8 +1,8 @@
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
+    Frame,
     layout::{Alignment, Rect},
     widgets::{Block, BorderType, Borders, Paragraph},
-    Frame,
 };
 
 use crate::consts::CONFIG;

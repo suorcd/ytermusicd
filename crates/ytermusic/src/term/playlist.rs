@@ -2,20 +2,20 @@ use std::sync::atomic::AtomicBool;
 
 use crossterm::event::{KeyCode, KeyEvent};
 use flume::Sender;
-use ratatui::{layout::Rect, style::Style, Frame};
+use ratatui::{Frame, layout::Rect, style::Style};
 use ytpapi2::YoutubeMusicVideoRef;
 
 use crate::{
+    DATABASE, ShutdownSignal,
     consts::{CACHE_DIR, CONFIG},
-    structures::sound_action::{download_manager_handler, SoundAction},
+    structures::sound_action::{SoundAction, download_manager_handler},
     systems::DOWNLOAD_MANAGER,
     utils::{invert, to_bidi_string},
-    ShutdownSignal, DATABASE,
 };
 
 use super::{
-    item_list::{ListItem, ListItemAction},
     EventResponse, ManagerMessage, Screen, Screens,
+    item_list::{ListItem, ListItemAction},
 };
 
 #[derive(Clone)]
@@ -82,12 +82,10 @@ impl Screen for Chooser {
         if let Some(ChooserAction::Play(a)) = self.item_list.on_mouse_press(mouse_event, frame_data)
         {
             if PLAYER_RUNNING.load(std::sync::atomic::Ordering::SeqCst) {
-                return EventResponse::Message(vec![ManagerMessage::Inspect(
-                    a.name,
-                    Screens::Playlist,
-                    a.videos,
-                )
-                .pass_to(Screens::PlaylistViewer)]);
+                return EventResponse::Message(vec![
+                    ManagerMessage::Inspect(a.name, Screens::Playlist, a.videos)
+                        .pass_to(Screens::PlaylistViewer),
+                ]);
             }
             self.play(&a);
             EventResponse::Message(vec![ManagerMessage::PlayerFrom(Screens::Playlist)])
@@ -99,12 +97,10 @@ impl Screen for Chooser {
     fn on_key_press(&mut self, key: KeyEvent, _: &Rect) -> EventResponse {
         if let Some(ChooserAction::Play(a)) = self.item_list.on_key_press(key).cloned() {
             if PLAYER_RUNNING.load(std::sync::atomic::Ordering::SeqCst) {
-                return EventResponse::Message(vec![ManagerMessage::Inspect(
-                    a.name,
-                    Screens::Playlist,
-                    a.videos,
-                )
-                .pass_to(Screens::PlaylistViewer)]);
+                return EventResponse::Message(vec![
+                    ManagerMessage::Inspect(a.name, Screens::Playlist, a.videos)
+                        .pass_to(Screens::PlaylistViewer),
+                ]);
             }
             self.play(&a);
             return EventResponse::Message(vec![ManagerMessage::ChangeState(Screens::MusicPlayer)]);

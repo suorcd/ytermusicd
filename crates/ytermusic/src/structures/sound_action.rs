@@ -6,10 +6,10 @@ use std::{fs, sync::Arc, time::Duration};
 use ytpapi2::YoutubeMusicVideoRef;
 
 use crate::{
+    DATABASE, ShutdownSignal,
     consts::CACHE_DIR,
     errors::handle_error_option,
-    systems::{player::PlayerState, DOWNLOAD_MANAGER},
-    ShutdownSignal, DATABASE,
+    systems::{DOWNLOAD_MANAGER, player::PlayerState},
 };
 
 /// Actions that can be sent to the player from other services

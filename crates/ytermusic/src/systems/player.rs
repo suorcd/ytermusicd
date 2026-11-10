@@ -4,19 +4,19 @@ use std::{
 };
 
 use common_structs::MusicDownloadStatus;
-use flume::{unbounded, Receiver, Sender};
+use flume::{Receiver, Sender, unbounded};
 use log::error;
 use player::{PlayError, Player, PlayerOptions};
 
 use ytpapi2::YoutubeMusicVideoRef;
 
 use crate::{
+    DATABASE,
     consts::{CACHE_DIR, CONFIG},
     errors::{handle_error, handle_error_option},
     structures::{media::Media, sound_action::SoundAction},
     systems::DOWNLOAD_MANAGER,
-    term::{list_selector::ListSelector, playlist::PLAYER_RUNNING, ManagerMessage, Screens},
-    DATABASE,
+    term::{ManagerMessage, Screens, list_selector::ListSelector, playlist::PLAYER_RUNNING},
 };
 
 pub struct PlayerState {
@@ -127,39 +127,36 @@ impl PlayerState {
                 self.set_relative_current(1);
             }
 
-            if self.is_current_downloaded() {
-                if let Some(video) = self.current().cloned() {
-                    let k = CACHE_DIR.join(format!("downloads/{}.mp4", video.video_id));
-                    if let Err(e) = self.sink.play(k.as_path()) {
-                        if matches!(e, PlayError::DecoderError(_)) {
-                            // Cleaning the file
+            if self.is_current_downloaded()
+                && let Some(video) = self.current().cloned()
+            {
+                let k = CACHE_DIR.join(format!("downloads/{}.mp4", video.video_id));
+                if let Err(e) = self.sink.play(k.as_path()) {
+                    if matches!(e, PlayError::DecoderError(_)) {
+                        // Cleaning the file
 
-                            DATABASE.remove_video(&video);
-                            handle_error(
-                                &self.updater,
-                                "invalid cleaning MP4",
-                                std::fs::remove_file(k),
-                            );
-                            handle_error(
-                                &self.updater,
-                                "invalid cleaning JSON",
-                                std::fs::remove_file(
-                                    CACHE_DIR.join(format!("downloads/{}.json", video.video_id)),
-                                ),
-                            );
-                            self.current = 0;
-                            DATABASE.write();
-                        } else {
-                            self.updater
-                                .send(ManagerMessage::PassTo(
-                                    Screens::DeviceLost,
-                                    Box::new(ManagerMessage::Error(
-                                        format!("{e:?}"),
-                                        Box::new(None),
-                                    )),
-                                ))
-                                .unwrap();
-                        }
+                        DATABASE.remove_video(&video);
+                        handle_error(
+                            &self.updater,
+                            "invalid cleaning MP4",
+                            std::fs::remove_file(k),
+                        );
+                        handle_error(
+                            &self.updater,
+                            "invalid cleaning JSON",
+                            std::fs::remove_file(
+                                CACHE_DIR.join(format!("downloads/{}.json", video.video_id)),
+                            ),
+                        );
+                        self.current = 0;
+                        DATABASE.write();
+                    } else {
+                        self.updater
+                            .send(ManagerMessage::PassTo(
+                                Screens::DeviceLost,
+                                Box::new(ManagerMessage::Error(format!("{e:?}"), Box::new(None))),
+                            ))
+                            .unwrap();
                     }
                 }
             }

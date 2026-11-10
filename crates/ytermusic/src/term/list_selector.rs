@@ -16,7 +16,7 @@ pub struct ListSelector {
 impl ListSelector {
     pub fn get_item_frame(&self, height: usize) -> (usize, usize) {
         let height = height.saturating_sub(2); // Remove the borders
-                                               // Add a little offset when the list is full
+        // Add a little offset when the list is full
         let start = self.scroll_position.saturating_sub(3);
         let length = self.list_size;
         let length_after_start = length.saturating_sub(start);
