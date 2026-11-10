@@ -83,6 +83,20 @@ YouTube network), document the manual reproduction steps and add the closest
 automated smoke test instead. Pull requests without this evidence are
 incomplete.
 
+## CI
+
+Every push and pull request runs `.github/workflows/ci.yml`:
+
+- `cargo fmt --all -- --check`
+- `cargo clippy --workspace --all-targets -- -D warnings`
+- `cargo check --workspace --all-targets`
+- `cargo test --workspace`
+
+The `web` job detects `crates/ytermusicd-web/package.json` and builds the web UI
+once that crate exists. The release workflow builds `ytermusicd` for Linux,
+Windows and macOS, bundles web assets when present, publishes SHA-256
+checksums, and can be dry-run with `workflow_dispatch`.
+
 ## Smoke tests
 
 Start the daemon:
