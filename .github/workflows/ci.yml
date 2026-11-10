@@ -5,13 +5,18 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  quality:
-    name: Code Quality
+  rust:
+    name: Rust workspace
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
@@ -27,11 +32,52 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      - name: Run cargo check
-        run: cargo check
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2
 
-      - name: Run cargo fmt
+      - name: Check formatting
         run: cargo fmt --all -- --check
 
-      - name: Run cargo clippy
-        run: cargo clippy -- -D warnings
+      - name: Run clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Check workspace
+        run: cargo check --workspace --all-targets
+
+      - name: Run tests
+        run: cargo test --workspace
+
+  web:
+    name: Web build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Detect web crate
+        id: detect
+        shell: bash
+        run: |
+          if [ -f crates/ytermusicd-web/package.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Node.js
+        if: steps.detect.outputs.present == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: crates/ytermusicd-web/package-lock.json
+
+      - name: Install dependencies
+        if: steps.detect.outputs.present == 'true'
+        working-directory: crates/ytermusicd-web
+        run: npm ci
+
+      - name: Build web UI
+        if: steps.detect.outputs.present == 'true'
+        working-directory: crates/ytermusicd-web
+        run: npm run build
