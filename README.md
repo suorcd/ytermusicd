@@ -16,9 +16,15 @@ phases.
 
 ```sh
 cargo run -p ytermusicd -- --help
-cargo run -p ytermusicd -- serve   # daemon skeleton, Ctrl-C to stop
+cargo run -p ytermusicd -- serve   # API on 127.0.0.1:8080
+curl http://127.0.0.1:8080/api/status
 cargo run -p ytermusicd -- mcp     # not implemented yet
 ```
+
+`serve` binds `127.0.0.1:8080` by default. Override it with `--bind`,
+`--port`, `YTERMUSICD_BIND` or `YTERMUSICD_PORT`. It shuts down gracefully on
+SIGINT/SIGTERM. The status payload is currently a skeleton; auth, playback and
+queue data are filled in by #6 and #7.
 
 ### Workspace layout
 
