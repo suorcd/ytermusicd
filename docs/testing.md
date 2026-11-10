@@ -85,7 +85,7 @@ incomplete.
 
 ## Smoke tests
 
-Start the daemon (once #10 lands):
+Start the daemon:
 
 ```sh
 cargo run -p ytermusicd -- serve
@@ -100,10 +100,12 @@ YTERMUSICD_URL=http://127.0.0.1:8080 ./scripts/smoke.sh
 ```
 
 The script checks `/api/status`, search, at least one SSE event, and MPRIS via
-`playerctl` when available.
+`playerctl` when available. The search and SSE checks require #12/#13; until
+then the script stops after `/api/status`.
 
 ## Current gaps
 
-The daemon, REST/SSE API, web UI and MCP proxy do not exist yet. The `just dev`,
-`just web` and `just smoke` recipes are placeholders until issues #1, #10, #14
-and #21 land.
+The daemon skeleton and `GET /api/status` exist. The full REST/SSE API, web UI,
+MCP proxy, systemd unit and Nix package are still in progress. `just smoke`
+covers `/api/status` today; the search/SSE checks arrive with #12/#13, and the
+`just web` recipe is a placeholder until #14.

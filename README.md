@@ -1,187 +1,97 @@
-# YTerMusic
+# ytermusicd
 
-> **Work in progress:** `ytermusicd` is a fork of
-> [ytermusic](https://github.com/ccgauche/ytermusic) adding a headless daemon,
-> web UI, MPRIS and MCP. The upstream TUI documentation below still describes
-> the existing client.
+> **Work in progress.** `ytermusicd` is a headless daemon fork of
+> [ytermusic](https://github.com/ccgauche/ytermusic), adding a web UI, MPRIS and
+> MCP. The daemon skeleton and `/api/status` exist; playback/queue, the full
+> API, web UI and MCP are in progress.
 
-![YTeRMUSiC](./assets/banner/YTeRMUSiC.png "YTeRMUSiC")
+[Build plan](https://sb.ser.ink/llm-wiki/concepts/ytermusicd-build-plan) ·
+[Roadmap](https://github.com/suorcd/ytermusicd/issues/25) ·
+[Issues](https://github.com/suorcd/ytermusicd/issues)
 
-YTerMusic is a TUI based Youtube Music Player that aims to be as fast and simple as possible.
+## What it is
 
-## ytermusicd CLI (work in progress)
+`ytermusicd` keeps YouTube Music playback, queue and downloads in a long-running
+daemon. Clients are thin:
 
-The daemon binary is scaffolded; the HTTP API and MCP proxy arrive in later
-phases.
+- **Web UI** (planned) — library, search, queue and now-playing views.
+- **MCP** (planned) — a stdio proxy exposing search/playback tools to assistants.
+- **MPRIS** — desktop media controls (`playerctl`, shell media widgets).
+- **Legacy TUI** — the existing `ytermusic` client remains available.
 
-```sh
-cargo run -p ytermusicd -- --help
-cargo run -p ytermusicd -- serve   # API on 127.0.0.1:8080
-curl http://127.0.0.1:8080/api/status
-cargo run -p ytermusicd -- mcp     # not implemented yet
-```
+The API is the contract. State and DTOs live in the daemon/API crates; the web
+UI, MCP proxy and any future TUI are clients.
 
-`serve` binds `127.0.0.1:8080` by default. Override it with `--bind`,
-`--port`, `YTERMUSICD_BIND` or `YTERMUSICD_PORT`. It shuts down gracefully on
-SIGINT/SIGTERM. The status payload is currently a skeleton; auth, playback and
-queue data are filled in by #6 and #7.
+## Status
 
-### Workspace layout
+| Area | State |
+| --- | --- |
+| Workspace, daemon skeleton, Nix dev shell | ✅ |
+| Local dev/test workflow (`just`, offline tests) | ✅ |
+| `ytermusicd serve` + `GET /api/status` | 🚧 skeleton |
+| Auth/config/path extraction | Planned |
+| Playback, queue, downloads, event bus, MPRIS | Planned |
+| Full REST + SSE API | Planned |
+| Web UI | Planned |
+| MCP proxy | Planned |
+| systemd/Nix package/first release | Planned |
 
-- `crates/ytermusicd` — headless daemon binary (`serve`, `mcp`; in progress)
-- `crates/ytermusic` — legacy TUI client
-- `crates/ytpapi2` — YouTube Music API client
-- `crates/player` — audio playback
-- `crates/database` — local download database
-- `crates/download-manager` — download queue
-- `crates/common-structs` — shared status types
+See the [roadmap](https://github.com/suorcd/ytermusicd/issues/25) for the
+ordered backlog.
 
-## Screenshots
-<p>
-  <img
-  src="./assets/screenshots/Choose-A-Playlist.png"
-  alt="Choose a playlist"
-  title="Choose a Playlist"
-  />
-  <img
-  src="./assets/screenshots/Playlist-All.gif"
-  alt="Playlist RGB"
-  title="Playlist RGB"
-  />
-</p>
+## Quickstart
 
-
-## Features and upcoming features
-
-- Play your Youtube Music Playlist and Supermix.
-- Memory efficient (Around 20MB of RAM while fully loaded)
-- Cache all downloads and store them
-- Work even without connection (If musics were already downloaded)
-- Automatic background download manager
-	### Check List 
-	- [x] Playlist selector
-	- [x] Error message display in the TUI
-	- [x] Enable connection less music playing
-	- [ ] Cache limit to not exceed some given disk space
-	- [x] A download limit to stop downloading after the queue is full
-	- [x] Mouse support
-	- [x] Search
-	- [x] Custom theming (You can use hex! #05313d = ![05313d](./assets/hex/05313d.png "#05313d") )
-
-## Install
-> [!TIP]
-> 3rd party AUR packages are available [here](https://aur.archlinux.org/packages?O=0&K=ytermusic).
-
-- Download the latest version from [releases](https://github.com/ccgauche/ytermusic/releases/latest).
-	### Linux
-	Install the following libraries: 
-	```sh
-	sudo apt install alsa-tools libasound2-dev libdbus-1-dev pkg-config
-	```
-- Use `cargo` to install the latest version
-	```sh
-	cargo install ytermusic --git https://github.com/ccgauche/ytermusic
-	```
-## Setup
-> [!IMPORTANT] 
-> If you're using Firefox enable the "Raw" switch so the cookie isn't mangled.
-> ![Firefox Raw Switch](./assets/screenshots/Firefox-Raw-Switch.png "Firefox Raw Switch")
-
-- Give `ytermusic` authentication to your account, by copying out the headers
-	1. Open the https://music.youtube.com website in your browser
-	2. Open the developer tools (<kbd>F12</kbd> or <kbd>Fn</kbd> + <kbd>F12</kbd>)
-	3. Go to the Network tab
-	4. Find the request to the `music.youtube.com` document `/` page
-	5. Copy the `Cookie` header from the associated response request
-	6. Create a `headers.txt` file in one of the checked [paths](https://docs.rs/directories/latest/directories/struct.ProjectDirs.html#method.config_dir).
-	7. Create an entry like this :
-	```
-	Cookie: <cookie>
-	User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36
-	```
-- Then you can start `ytermusic`
-
-### (Optional) Using a brand account
-- If you use a second account for youtube music
-  	1. Go to https://myaccount.google.com/
-  	2. Switch to your brand account
-  	3. copy the number written in the url, after \b\
-  	4. paste it into a new `account_id.txt` file in the same folder as `headers.txt`
-
-## Building from source
-
-- Clone the repository
-- Install rust `https://rustup.rs` nightly
-- Run `cargo build --release`
-- The executable is in `target/release/ytermusic.exe` or `target/release/ytermusic`
-
-### Development with Nix
-
-The repository includes a `flake.nix` with a reproducible development shell
-(Rust, Node.js, the native libraries, `yt-dlp` and `ffmpeg`):
+Requirements: Nix with flakes (recommended), or Rust 1.99+, Node 22+ and the
+native libraries listed in the [dev shell](flake.nix).
 
 ```sh
+git clone git@github.com:suorcd/ytermusicd.git
+cd ytermusicd
 nix develop
-cargo check --workspace
-nix develop -c npm --version
+
+cargo run -p ytermusicd -- --help
+cargo run -p ytermusicd -- serve
 ```
 
-The shell supports x86_64/aarch64 Linux and Apple Silicon macOS. Intel macOS
-is not supported by the current nixpkgs-unstable; use `rustup` and the native
-package manager there.
-
-Once the web crate exists, build it from the shell with:
+In another shell:
 
 ```sh
-(cd crates/ytermusicd-web && npm ci && npm run build)
+curl http://127.0.0.1:8080/api/status
 ```
 
-Validate the flake with:
+`serve` binds `127.0.0.1:8080` by default. Override it with `--bind`, `--port`,
+`YTERMUSICD_BIND` or `YTERMUSICD_PORT`. It shuts down gracefully on
+SIGINT/SIGTERM.
 
-```sh
-nix flake check
+> The status payload is currently a skeleton. Auth, playback and queue values
+> are filled in by issues #6 and #7.
+
+## Authentication
+
+`ytermusicd` uses YouTube Music browser cookies. Create a `headers.txt` with:
+
+```
+Cookie: <cookie>
+User-Agent: Mozilla/5.0 ...
 ```
 
-## Usage
+1. Open https://music.youtube.com in your browser.
+2. Open developer tools (F12).
+3. In the Network tab, open the page request for `/`.
+4. Copy the `Cookie` header (Firefox: enable **Raw** first).
+5. Copy the `User-Agent` header.
+6. Save both to `headers.txt` in the config directory.
 
-- Use your mouse to <kbd>click</kbd> in lists if your terminal has mouse support
-- Press <kbd>Space</kbd> to play/pause
-- Press <kbd>Enter</kbd> to select a playlist or a music
-- Press <kbd>f</kbd> to search
-- Press <kbd>s</kbd> to shuffle
-- Press <kbd>r</kbd> to remove a music from the main playlist
-- Press <kbd>Arrow Right</kbd> or <kbd>\></kbd> to skip 5 seconds
-- Press <kbd>Arrow Left</kbd> or <kbd>\<</kbd> to go back 5 seconds
-- Press <kbd>CTRL</kbd> + <kbd>Arrow Right</kbd> or <kbd>CTRL</kbd> + <kbd>\></kbd> to go to the next song
-- Press <kbd>CTRL</kbd> + <kbd>Arrow Left</kbd> or <kbd>CTRL</kbd> + <kbd>\<</kbd> to go to the previous song
-- Press <kbd>+</kbd> for volume up
-- Press <kbd>-</kbd> for volume down
-- Press <kbd>Arrow down</kbd> to scroll down
-- Press <kbd>Arrow up</kbd> to scroll up
-- Press <kbd>ESC</kbd> to exit the current menu
-- Press <kbd>CTRL</kbd> + <kbd>C</kbd> or <kbd>CTRL</kbd> + <kbd>D</kbd> to exit
+The current client checks `./headers.txt` and the XDG config directory. The
+daemon's `YTERMUSICD_HEADERS` / `ytermusicd` config resolution is tracked in #6.
 
-## How to fix common issues
+Brand accounts: copy the account ID from `myaccount.google.com` (the number
+after `/b/`) into `account_id.txt` next to `headers.txt`.
 
-If you have any issues start by running:
-```sh
-ytermusic --fix-db
-```
-This will try to fix any issues with the cache database.
+**Never commit `headers.txt`, `account_id.txt`, cookies or logs containing
+them.** They are gitignored.
 
-If you still have issues, you can clear the cache by running:
-```sh
-ytermusic --clear-cache
-```
-
-If you need to report an issue or find the files related to ytermusic:
-```sh
-ytermusic --files
-```
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/testing.md](docs/testing.md).
+## Development
 
 ```sh
 nix develop
@@ -189,99 +99,48 @@ just check
 just test
 ```
 
-Bug fixes and behavior changes require a test that fails before the fix and
-passes after it. If a deterministic test is impractical, document the manual
-reproduction and add the closest smoke test.
+- [docs/testing.md](docs/testing.md) — local workflow, fixtures, regression policy
+- [CONTRIBUTING.md](CONTRIBUTING.md) — contribution rules
+- [AGENTS.md](AGENTS.md) — worktree-per-issue workflow for agents
+- [docs/architecture.md](docs/architecture.md) — daemon/API/client design
+- [docs/decisions](docs/decisions/) — architecture decision records
 
-## Changelog
+### Workspace layout
 
-```
-Beta b0.1.1
- - Added `hide_channels_on_homepage` with a default value of `true` to the config file
- - Added `hide_albums_on_homepage` with a default value of `false` to the config file
- - Fixed default style to support transparency
- - Added more color configuration options
+- `crates/ytermusicd` — daemon binary (`serve`, `mcp`; in progress)
+- `crates/ytermusic` — legacy TUI client
+- `crates/ytpapi2` — YouTube Music API client
+- `crates/player` — audio playback
+- `crates/database` — local download database
+- `crates/download-manager` — download queue
+- `crates/common-structs` — shared status types
 
-Beta b0.1.0
- - Fixed keyboard handling on windows
- - Improved error handling
- - Fixed youtube downloads
- - Made volume bar optional in config
- - Improved performance and updated dependencies
+Planned: `crates/ytermusicd-core` (daemon services),
+`crates/ytermusicd-api` (shared DTOs) and `crates/ytermusicd-web`.
 
-Alpha a0.0.11
+## API
 
-- Added scrollable music view
-- Added shuffle functionality
-- Fixed some crashes while resizing the app
-- Added error messages for invalid headers or cookies
-- Added error messages for expired cookies
+The v1 contract is defined in the build plan. Current endpoint:
 
-Alpha a0.0.10
+- `GET /api/status`
 
-- Speed up the download process
-- Fix the download limit
-- Fix music artists getting smashed together
-- Fix the download manager not downloading all musics
-- Improved stability
-- Improved logs and added timings to better debug
+Planned: playlists, search, queue, playback commands and SSE. See
+[docs/architecture.md](docs/architecture.md) and the roadmap.
 
-Alpha a0.0.9:
+## MCP
 
-- Progress info for downloads
-- Mouse support on time bar
-- Vertical volume bar
-- Vertical volume bar supports mouse click
-- Scroll to change volume and skip in timeline
-- Improved the scrolling action
-- Fixed the bug where the time bar would not update
-- Debouncing the search input
-- Changed the location of the cache folder to follow the XDG Base Directory Specification (By @FerrahWolfeh #20)
-- More configuration options (By @ccgauche and @FerrahWolfeh)
+`ytermusicd mcp` will be a stdio proxy to the daemon (issue #21). It is not
+implemented yet.
 
-Alpha a0.0.8
+## Legacy TUI
 
-- Fixed scrolling
-- Fixed audio-glitches
-- Removed nightly flag use
+The upstream TUI is still built as `ytermusic`. See
+[docs/legacy-tui.md](docs/legacy-tui.md) for its features, installation and
+keybindings.
 
-Alpha a0.0.7
+## License and attribution
 
-- Major changes in the API
-- Fixed log file bloat issue
-
-Alpha a0.0.6
-
-- Fix: Fix a bug where the app would crash when trying to play a song that was not downloaded
-- Fix: Improve the logger to not print the same error twice
-- Improved startup time
-- Fixed linux build
-- Changed how task are distributed to the thread pool
-
-Alpha a0.0.5
-
-- Added local database cache to improve IO accesses
-- Added searching for musics in the local library
-- Greatly improved render performance and RAM usage
-- Error management and error display in specific screen
-
-Alpha a0.0.4
-
-- Added menu navigation
-- Added searching for musics
-- Added new terminal backend
-
-Alpha a0.0.3
-
-- Mouse support to select playlist and music
-- Download limiter
-- Connection less music playing
-
-Alpha a0.0.2
-
-- Playlist selector
-- Improved error management
-- Improved TUI
-- Performance upgrade
-- Switch to Rustls instead of openSSL
-```
+Apache-2.0. This project is a fork of
+[ccgauche/ytermusic](https://github.com/ccgauche/ytermusic); see
+[NOTICE](NOTICE), [LICENCE](LICENCE) and
+[docs/upstream-changelog.md](docs/upstream-changelog.md).

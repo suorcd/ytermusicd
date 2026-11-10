@@ -21,15 +21,15 @@ fmt:
 clippy:
     cargo clippy --workspace --all-targets -- -D warnings
 
-# Run the legacy TUI client; the daemon entrypoint arrives with #1.
+# Run the daemon with the default bind/port.
 dev:
-    cargo run -p ytermusic
+    cargo run -p ytermusicd -- serve
 
 # Build/serve the web UI; arrives with #14.
 web:
     @echo "web UI not implemented yet (see #14)"
     @exit 1
 
-# Smoke-test a running daemon; arrives with #10.
+# Smoke-test a running daemon; search/SSE checks require #12/#13.
 smoke:
     ./scripts/smoke.sh
