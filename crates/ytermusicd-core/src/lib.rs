@@ -7,6 +7,7 @@ pub mod events;
 pub mod model;
 pub mod paths;
 pub mod playback;
+pub mod state;
 
 pub use auth::{Auth, AuthError, AuthState, AuthStatus, LoadedAuth, resolve_auth};
 pub use config::{ConfigError, DaemonConfig, Downloader};
@@ -16,3 +17,4 @@ pub use model::{
 };
 pub use paths::{Paths, PathsError};
 pub use playback::{AudioSink, PlaybackError, PlaybackService};
+pub use state::{PersistedState, STATE_VERSION, StateError};

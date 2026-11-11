@@ -303,6 +303,29 @@ impl Queue {
         self.current = None;
     }
 
+    /// Restore a previously persisted queue in its saved playback order.
+    pub fn restore(
+        &mut self,
+        tracks: Vec<Track>,
+        current: Option<usize>,
+        repeat: RepeatMode,
+        shuffle: bool,
+    ) {
+        self.items = tracks
+            .into_iter()
+            .map(|track| QueueItem {
+                track,
+                download: MusicDownloadStatus::NotDownloaded,
+            })
+            .collect();
+        self.original = None;
+        self.current = current
+            .filter(|index| *index < self.items.len())
+            .or_else(|| (!self.items.is_empty()).then_some(0));
+        self.repeat = repeat;
+        self.shuffle = shuffle;
+    }
+
     pub fn set_current(&mut self, index: Option<usize>) {
         self.current = index.filter(|index| *index < self.items.len());
     }
