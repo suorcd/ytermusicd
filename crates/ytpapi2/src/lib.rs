@@ -142,6 +142,16 @@ pub struct YoutubeMusicInstance {
     client: reqwest::Client,
 }
 
+/// Consume one continuation from the budget and report whether the response
+/// should request another page.
+fn consume_continuation(remaining: &mut usize) -> bool {
+    if *remaining == 0 {
+        return false;
+    }
+    *remaining -= 1;
+    *remaining > 0
+}
+
 impl YoutubeMusicInstance {
     pub async fn from_header_file(path: &Path) -> Result<Self> {
         let mut headers = HeaderMap::new();
@@ -410,11 +420,10 @@ impl YoutubeMusicInstance {
         let mut library = from_json(&library_json, get_playlist)?;
         debug!("Library: {library:?}");
         while let Some(continuation) = continuations.pop() {
-            n_continuations -= 1;
+            let fetch_more = consume_continuation(&mut n_continuations);
             trace!("Fetching continuation {continuation:?} ({endpoint:?})");
-            let (library_json, new_continuations) = self
-                .browse_continuation(&continuation, (n_continuations - 1) > 0)
-                .await?;
+            let (library_json, new_continuations) =
+                self.browse_continuation(&continuation, fetch_more).await?;
             debug!("Library response: {library_json}");
             continuations.extend(new_continuations);
             let new_library = from_json(&library_json, get_playlist)?;
@@ -455,11 +464,10 @@ impl YoutubeMusicInstance {
         debug!("Videos: {videos:?}");
 
         while let Some(continuation) = continuations.pop() {
-            n_continuations -= 1;
+            let fetch_more = consume_continuation(&mut n_continuations);
             trace!("Fetching continuation {continuation:?}");
-            let (playlist_json, new_continuations) = self
-                .browse_continuation(&continuation, (n_continuations - 1) > 0)
-                .await?;
+            let (playlist_json, new_continuations) =
+                self.browse_continuation(&continuation, fetch_more).await?;
             debug!("Playlist response: {playlist_json}");
             continuations.extend(new_continuations);
             let new_videos = parse_playlist(&playlist_json)?;
@@ -488,10 +496,10 @@ impl YoutubeMusicInstance {
         debug!("Playlists: {playlists:?}");
 
         while let Some(continuation) = continuations.pop() {
-            n_continuations -= 1;
+            let fetch_more = consume_continuation(&mut n_continuations);
             trace!("Fetching continuation {continuation:?}");
             let (search_json, new_continuations) =
-                self.browse_continuation(&continuation, false).await?;
+                self.browse_continuation(&continuation, fetch_more).await?;
             trace!("Search response: {search_json}");
             continuations.extend(new_continuations);
             let new_videos = from_json(&search_json, get_video)?;
@@ -519,11 +527,10 @@ impl YoutubeMusicInstance {
         debug!("Playlists: {playlists:?}");
 
         while let Some(continuation) = continuations.pop() {
-            n_continuations -= 1;
+            let fetch_more = consume_continuation(&mut n_continuations);
             trace!("Fetching continuation {continuation:?}");
-            let (home_json, new_continuations) = self
-                .browse_continuation(&continuation, n_continuations > 0)
-                .await?;
+            let (home_json, new_continuations) =
+                self.browse_continuation(&continuation, fetch_more).await?;
             debug!("Home response: {home_json}");
             continuations.extend(new_continuations);
             let new_videos = from_json(&home_json, get_video)?;
@@ -620,4 +627,33 @@ pub enum YoutubeMusicError {
     IoError(std::io::Error),
     YoutubeMusicError(Value),
     InvalidHeaders,
+}
+
+#[cfg(test)]
+mod continuation_tests {
+    use super::consume_continuation;
+
+    #[test]
+    fn zero_budget_does_not_underflow() {
+        let mut remaining = 0;
+        assert!(!consume_continuation(&mut remaining));
+        assert_eq!(remaining, 0);
+    }
+
+    #[test]
+    fn one_budget_does_not_underflow() {
+        let mut remaining = 1;
+        assert!(!consume_continuation(&mut remaining));
+        assert_eq!(remaining, 0);
+    }
+
+    #[test]
+    fn many_budget_stops_at_zero() {
+        let mut remaining = 3;
+        assert!(consume_continuation(&mut remaining));
+        assert!(consume_continuation(&mut remaining));
+        assert!(!consume_continuation(&mut remaining));
+        assert_eq!(remaining, 0);
+        assert!(!consume_continuation(&mut remaining));
+    }
 }
