@@ -67,7 +67,7 @@ pub struct QueueSnapshot {
     pub shuffle: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct PlaybackSnapshot {
     pub status: PlaybackStatus,
     pub current_index: Option<usize>,
