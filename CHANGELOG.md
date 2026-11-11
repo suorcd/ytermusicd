@@ -10,6 +10,7 @@
 - Add a Nix flake with a reproducible development shell.
 - Add the local dev/test workflow (`just`, offline tests, smoke script).
 - Add `AGENTS.md`, `CONTRIBUTING.md` and architecture docs.
+- Add a systemd user unit and deployment documentation.
 
 Release history inherited from the upstream project is preserved in
 [docs/upstream-changelog.md](docs/upstream-changelog.md).

@@ -128,6 +128,7 @@ just test
 - [CONTRIBUTING.md](CONTRIBUTING.md) — contribution rules
 - [AGENTS.md](AGENTS.md) — worktree-per-issue workflow for agents
 - [docs/architecture.md](docs/architecture.md) — daemon/API/client design
+- [docs/deployment.md](docs/deployment.md) — systemd user service and environment
 - [docs/decisions](docs/decisions/) — architecture decision records
 - [0004 — upstream strategy](docs/decisions/0004-upstream-strategy.md) — fork-first with selective upstreaming
 
