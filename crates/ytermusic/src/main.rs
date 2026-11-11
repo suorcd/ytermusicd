@@ -10,16 +10,15 @@ use std::{
     future::Future,
     panic,
     path::{Path, PathBuf},
-    str::FromStr,
     sync::RwLock,
 };
 use systems::{logger::init, player::player_system};
+use ytermusicd_core::{Auth, LoadedAuth, Paths, resolve_auth};
 
 use crate::{
     consts::HEADER_TUTORIAL,
     structures::{media::run_window_handler, sound_action::download_manager_handler},
     systems::{DOWNLOAD_MANAGER, logger::get_log_file_path},
-    utils::get_project_dirs,
 };
 
 mod config;
@@ -54,11 +53,20 @@ where
     })
 }
 
-static COOKIES: Lazy<RwLock<Option<String>>> = Lazy::new(|| RwLock::new(None));
+static AUTH: Lazy<RwLock<Option<LoadedAuth>>> = Lazy::new(|| RwLock::new(None));
 
-pub fn try_get_cookies() -> Option<String> {
-    let cookies = COOKIES.read().unwrap();
-    cookies.clone()
+pub fn try_get_auth() -> Option<Auth> {
+    AUTH.read()
+        .unwrap()
+        .as_ref()
+        .map(|loaded| loaded.auth.clone())
+}
+
+pub fn try_get_auth_source() -> Option<PathBuf> {
+    AUTH.read()
+        .unwrap()
+        .as_ref()
+        .map(|loaded| loaded.source.clone())
 }
 
 fn main() {
@@ -72,7 +80,7 @@ fn main() {
             "--files" => {
                 println!("# Location of ytermusic files");
                 println!(" - Logs: {}", get_log_file_path().display());
-                println!(" - Headers: {}", get_header_file().unwrap().1.display());
+                println!(" - Headers: {}", headers_path_for_display().display());
                 println!(" - Cache: {}", CACHE_DIR.display());
                 return;
             }
@@ -98,10 +106,20 @@ fn main() {
                 init().expect("Failed to initialize logger");
                 let param = std::env::args().nth(2);
                 if let Some(cookies) = cookies(param) {
-                    let mut cookies_guard = COOKIES.write().unwrap();
-                    info!("Cookies: {cookies}");
-                    *cookies_guard = Some(cookies);
-                    info!("Cookies loaded");
+                    match Auth::from_cookie(cookies, None) {
+                        Ok(auth) => {
+                            *AUTH.write().unwrap() = Some(LoadedAuth {
+                                auth,
+                                source: PathBuf::from("<browser cookies>"),
+                                legacy: false,
+                            });
+                            info!("Cookies loaded");
+                        }
+                        Err(error) => {
+                            error!("{error}");
+                            return;
+                        }
+                    }
                 } else {
                     error!("Can't load cookies");
                     error!("Maybe rookie didn't find any cookies or any browser");
@@ -188,28 +206,14 @@ fn cookies(specific_browser: Option<String>) -> Option<String> {
     Some(cookies)
 }
 
-fn get_header_file() -> Result<(String, PathBuf), (std::io::Error, PathBuf)> {
-    let fp = PathBuf::from_str("headers.txt").unwrap();
-    if let Ok(e) = std::fs::read_to_string(&fp) {
-        return Ok((e, fp));
+fn headers_path_for_display() -> PathBuf {
+    let local = PathBuf::from("headers.txt");
+    if local.exists() {
+        return local;
     }
-    let fp = get_project_dirs()
-        .ok_or_else(|| {
-            (
-                std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    "Can't find project dir. This is a `directories` crate issue",
-                ),
-                Path::new("./").to_owned(),
-            )
-        })?
-        .config_dir()
-        .to_owned();
-    if let Err(e) = std::fs::create_dir_all(&fp) {
-        println!("Can't create app directory {e} in `{}`", fp.display());
-    }
-    let fp = fp.join("headers.txt");
-    std::fs::read_to_string(&fp).map_or_else(|e| Err((e, fp.clone())), |e| Ok((e, fp.clone())))
+    Paths::discover()
+        .map(|paths| paths.headers_file())
+        .unwrap_or(local)
 }
 
 async fn app_start_main(updater_r: Receiver<ManagerMessage>, updater_s: Sender<ManagerMessage>) {
@@ -239,15 +243,31 @@ async fn app_start_main(updater_r: Receiver<ManagerMessage>, updater_s: Sender<M
         }
     }
 
-    if try_get_cookies().is_none()
-        && let Err((error, filepath)) = get_header_file()
-    {
-        println!("Can't read or find `{}`", filepath.display());
-        println!("Error: {error}");
-        println!("{HEADER_TUTORIAL}");
-        // prevent console window closing on windows, does nothing on linux
-        std::io::stdin().read_line(&mut String::new()).unwrap();
-        return;
+    if try_get_auth().is_none() {
+        let requested = Path::new("headers.txt")
+            .exists()
+            .then(|| PathBuf::from("headers.txt"));
+        let loaded = Paths::discover()
+            .map_err(|error| error.to_string())
+            .and_then(|paths| {
+                resolve_auth(&paths, requested.as_deref()).map_err(|error| error.to_string())
+            });
+
+        match loaded {
+            Ok(loaded) => {
+                if loaded.legacy {
+                    info!("using legacy headers file {}", loaded.source.display());
+                }
+                *AUTH.write().unwrap() = Some(loaded);
+            }
+            Err(error) => {
+                println!("Can't load headers: {error}");
+                println!("{HEADER_TUTORIAL}");
+                // prevent console window closing on windows, does nothing on linux
+                std::io::stdin().read_line(&mut String::new()).unwrap();
+                return;
+            }
+        }
     }
 
     STARTUP_TIME.log("Startup");

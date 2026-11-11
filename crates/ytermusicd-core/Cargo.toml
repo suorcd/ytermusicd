@@ -1,0 +1,17 @@
+[package]
+name = "ytermusicd-core"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "Headless core services for ytermusicd"
+
+[dependencies]
+directories = "5.0"
+log = "0.4"
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+toml = "0.8"
+ytpapi2.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

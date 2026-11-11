@@ -230,7 +230,7 @@ impl YoutubeMusicInstance {
         let sapisid = cookies
             .between("SAPISID=", ";")
             .ok_or_else(|| YoutubeMusicError::NoSapsidInCookie)?;
-        trace!("Cookies parsed! SAPISID: {}", sapisid);
+        trace!("Cookies parsed (SAPISID redacted)");
         let innertube_api_key = response
             .between("INNERTUBE_API_KEY\":\"", "\"")
             .ok_or_else(|| YoutubeMusicError::CantFindInnerTubeApiKey(response.to_string()))?;
@@ -265,7 +265,7 @@ impl YoutubeMusicInstance {
         for byte in result {
             hex.push_str(&format!("{byte:02x}"));
         }
-        trace!("Computed SAPI Hash{timestamp}_{hex}");
+        trace!("Computed SAPI hash (redacted)");
         format!("{timestamp}_{hex}")
     }
     async fn browse_continuation(

@@ -2,23 +2,20 @@ use axum::{Json, Router, extract::State, routing::get};
 use serde::Serialize;
 use std::{io, net::SocketAddr, time::Instant};
 use tokio::{net::TcpListener, signal};
+use ytermusicd_core::AuthStatus;
 
 #[derive(Clone)]
 pub struct AppState {
     started_at: Instant,
+    auth: AuthStatus,
 }
 
 impl AppState {
-    pub fn new() -> Self {
+    pub fn new(auth: AuthStatus) -> Self {
         Self {
             started_at: Instant::now(),
+            auth,
         }
-    }
-}
-
-impl Default for AppState {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -28,8 +25,7 @@ pub struct StatusResponse {
     pub version: &'static str,
     pub status: &'static str,
     pub uptime_seconds: u64,
-    /// Populated by the auth/core work in #6.
-    pub auth: &'static str,
+    pub auth: AuthStatus,
     /// Populated by the playback/queue service in #7.
     pub playback: Option<()>,
     pub queue_length: usize,
@@ -57,14 +53,14 @@ async fn status(State(state): State<AppState>) -> Json<StatusResponse> {
         version: env!("CARGO_PKG_VERSION"),
         status: "ok",
         uptime_seconds: state.started_at.elapsed().as_secs(),
-        auth: "unknown",
+        auth: state.auth,
         playback: None,
         queue_length: 0,
         downloads: DownloadSummary::default(),
     })
 }
 
-pub async fn serve(bind: &str, port: u16) -> io::Result<()> {
+pub async fn serve(bind: &str, port: u16, auth: AuthStatus) -> io::Result<()> {
     let addr: SocketAddr = format!("{bind}:{port}").parse().map_err(|error| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -78,7 +74,7 @@ pub async fn serve(bind: &str, port: u16) -> io::Result<()> {
     let local_addr = listener.local_addr()?;
     println!("ytermusicd listening on http://{local_addr}");
 
-    axum::serve(listener, router(AppState::new()))
+    axum::serve(listener, router(AppState::new(auth)))
         .with_graceful_shutdown(shutdown_signal())
         .await
 }
@@ -112,10 +108,11 @@ async fn shutdown_signal() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+    use ytermusicd_core::AuthError;
 
-    #[tokio::test]
-    async fn status_endpoint_returns_json() {
-        let app = router(AppState::new());
+    async fn status_body(auth: AuthStatus) -> serde_json::Value {
+        let app = router(AppState::new(auth));
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let server = tokio::spawn(async move {
@@ -126,21 +123,47 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), 200);
-        let body: serde_json::Value =
-            serde_json::from_str(&response.text().await.unwrap()).unwrap();
+        let body = serde_json::from_str(&response.text().await.unwrap()).unwrap();
+        server.abort();
+        body
+    }
+
+    #[tokio::test]
+    async fn status_endpoint_returns_json() {
+        let body = status_body(AuthStatus::ok(PathBuf::from("/tmp/headers.txt"))).await;
         assert_eq!(body["name"], "ytermusicd");
         assert_eq!(body["status"], "ok");
+        assert_eq!(body["auth"]["state"], "ok");
         assert!(body["uptime_seconds"].is_u64());
         assert!(body["playback"].is_null());
         assert_eq!(body["queue_length"], 0);
         assert_eq!(body["downloads"]["queued"], 0);
+    }
 
-        server.abort();
+    #[tokio::test]
+    async fn status_reports_missing_auth() {
+        let error = AuthError::NotFound {
+            path: PathBuf::from("/tmp/headers.txt"),
+        };
+        let body = status_body(AuthStatus::from_error(&error)).await;
+        assert_eq!(body["auth"]["state"], "missing");
+        assert!(
+            body["auth"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("not found")
+        );
     }
 
     #[tokio::test]
     async fn rejects_invalid_bind_address() {
-        let error = serve("not-an-ip", 8080).await.unwrap_err();
+        let error = serve(
+            "not-an-ip",
+            8080,
+            AuthStatus::ok(PathBuf::from("/tmp/headers.txt")),
+        )
+        .await
+        .unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
     }
 }

@@ -83,13 +83,38 @@ User-Agent: Mozilla/5.0 ...
 6. Save both to `headers.txt` in the config directory.
 
 The current client checks `./headers.txt` and the XDG config directory. The
-daemon's `YTERMUSICD_HEADERS` / `ytermusicd` config resolution is tracked in #6.
+daemon resolves headers in this order:
+
+1. `--headers <path>` / `YTERMUSICD_HEADERS`
+2. `$XDG_CONFIG_HOME/ytermusicd/headers.txt`
+3. `$XDG_CONFIG_HOME/ytermusic/headers.txt` (legacy, with a warning)
+
+It validates the cookie and `SAPISID` at startup and exits with an actionable
+error instead of prompting on stdin. The legacy TUI shares the validation and
+still checks `./headers.txt` first.
 
 Brand accounts: copy the account ID from `myaccount.google.com` (the number
 after `/b/`) into `account_id.txt` next to `headers.txt`.
 
 **Never commit `headers.txt`, `account_id.txt`, cookies or logs containing
 them.** They are gitignored.
+
+## Configuration
+
+The daemon reads `$XDG_CONFIG_HOME/ytermusicd/config.toml` (usually
+`~/.config/ytermusicd/config.toml`). See
+[config.example.toml](config.example.toml) for the available fields and
+defaults. CLI flags and environment variables override the config file:
+
+| Option | Environment |
+| --- | --- |
+| `--bind` | `YTERMUSICD_BIND` |
+| `--port` | `YTERMUSICD_PORT` |
+| `--headers` | `YTERMUSICD_HEADERS` |
+| `--config` | `YTERMUSICD_CONFIG` |
+
+`config.toml` parse errors, invalid values and malformed headers are reported
+with the file path; they are never silently replaced with defaults.
 
 ## Development
 
@@ -109,6 +134,7 @@ just test
 ### Workspace layout
 
 - `crates/ytermusicd` — daemon binary (`serve`, `mcp`; in progress)
+- `crates/ytermusicd-core` — headless paths, config and auth
 - `crates/ytermusic` — legacy TUI client
 - `crates/ytpapi2` — YouTube Music API client
 - `crates/player` — audio playback
@@ -116,8 +142,7 @@ just test
 - `crates/download-manager` — download queue
 - `crates/common-structs` — shared status types
 
-Planned: `crates/ytermusicd-core` (daemon services),
-`crates/ytermusicd-api` (shared DTOs) and `crates/ytermusicd-web`.
+Planned: `crates/ytermusicd-api` (shared DTOs) and `crates/ytermusicd-web`.
 
 ## API
 

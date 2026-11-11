@@ -6523,6 +6523,7 @@ dependencies = [
  "urlencoding",
  "varuint",
  "winit",
+ "ytermusicd-core",
  "ytpapi2",
 ]
 
@@ -6538,6 +6539,20 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "ytermusicd-core",
+]
+
+[[package]]
+name = "ytermusicd-core"
+version = "0.1.0"
+dependencies = [
+ "directories",
+ "log",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.18",
+ "toml",
+ "ytpapi2",
 ]
 
 [[package]]

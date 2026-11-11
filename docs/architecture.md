@@ -26,7 +26,7 @@ SIGINT/SIGTERM. State is owned by the daemon, not by an individual client.
 | Component | Status | Responsibility |
 | --- | --- | --- |
 | `crates/ytermusicd` | Current | CLI, HTTP server, MCP proxy entrypoint |
-| `ytermusicd-core` | Planned (#6/#7) | Auth, config, queue/playback, downloads, MPRIS, event bus |
+| `ytermusicd-core` | Current (#6) | Auth, config, paths; playback/downloads planned |
 | `ytermusicd-api` | Planned (#11) | Shared DTOs, event types and generated TypeScript |
 | `crates/ytermusicd-web` | Planned (#14) | Svelte web UI |
 | `crates/ytpapi2` | Current | YouTube Music API client |
@@ -64,8 +64,9 @@ track.
   shuffle/repeat, written atomically and restored on startup.
 - **Legacy**: `last-playlist.json` from the TUI.
 
-The daemon will migrate paths from the legacy `com/ccgauche/ytermusic`
-directories in #6.
+The daemon uses the `com/suorcd/ytermusicd` directories and falls back to the
+legacy `com/ccgauche/ytermusic` headers file with a warning. The legacy TUI
+keeps its existing cache/config directories.
 
 ## API
 
