@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 use flume::Sender;
 use log::{error, info};
@@ -8,13 +11,14 @@ use ytpapi2::{Endpoint, YoutubeMusicInstance, YoutubeMusicPlaylistRef};
 
 use crate::{
     consts::CONFIG,
-    get_header_file, run_service,
+    run_service,
     structures::performance,
     term::{ManagerMessage, Screens},
+    try_get_auth, try_get_auth_source,
 };
 
 pub fn get_text_cookies_expired_or_invalid() -> String {
-    let (Ok((_, path)) | Err((_, path))) = get_header_file();
+    let path = try_get_auth_source().unwrap_or_else(|| PathBuf::from("headers.txt"));
     format!(
         "The `{}` file is not configured correctly. \nThe cookies are expired or invalid.",
         path.display()
@@ -25,8 +29,11 @@ pub fn spawn_api_task(updater_s: Sender<ManagerMessage>) {
     run_service(async move {
         info!("API task on");
         let guard = performance::guard("API task");
-        let client =
-            YoutubeMusicInstance::from_header_file(get_header_file().unwrap().1.as_path()).await;
+        let Some(auth) = try_get_auth() else {
+            error!("no auth available; API task disabled");
+            return;
+        };
+        let client = auth.create_client().await;
         match client {
             Ok(api) => {
                 let api = Arc::new(api);

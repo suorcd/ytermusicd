@@ -10,18 +10,15 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Paragraph},
 };
 use tokio::task::JoinHandle;
-use ytpapi2::{
-    HeaderMap, HeaderValue, SearchResults, YoutubeMusicInstance, YoutubeMusicPlaylistRef,
-    YoutubeMusicVideoRef,
-};
+use ytpapi2::{SearchResults, YoutubeMusicInstance, YoutubeMusicPlaylistRef, YoutubeMusicVideoRef};
 
 use crate::{
     DATABASE, ShutdownSignal,
     consts::CONFIG,
-    get_header_file, run_service,
+    run_service,
     structures::sound_action::{SoundAction, download_manager_handler},
     systems::DOWNLOAD_MANAGER,
-    try_get_cookies,
+    try_get_auth,
     utils::{invert, to_bidi_string},
 };
 
@@ -229,22 +226,11 @@ impl Search {
             ))),
             goto: Screens::MusicPlayer,
             search_handle: None,
-            api: if let Some(cookies) = try_get_cookies() {
-                let mut headermap = HeaderMap::new();
-                headermap.insert(
-                    "cookie",
-                    HeaderValue::from_str(&cookies).unwrap(),
-                );
-                headermap.insert(
-                    "user-agent",
-                    HeaderValue::from_static("Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"),
-                );
-                YoutubeMusicInstance::new(headermap, None).await    //don't think we need a brand account for search
+            api: if let Some(auth) = try_get_auth() {
+                auth.create_client().await.ok().map(Arc::new)
             } else {
-                YoutubeMusicInstance::from_header_file(get_header_file().unwrap().1.as_path()).await
-            }
-                .ok()
-                .map(Arc::new),
+                None
+            },
             action_sender,
         }
     }

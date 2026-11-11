@@ -47,6 +47,7 @@ log = "0.4.21"
 database.workspace = true
 download-manager.workspace = true
 common-structs.workspace = true
+ytermusicd-core.workspace = true
 
 # -- Cookies auto retreival --
 rookie = "0.5.2"

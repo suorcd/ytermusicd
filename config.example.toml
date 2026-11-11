@@ -1,0 +1,26 @@
+# ytermusicd configuration
+#
+# Copy this file to $XDG_CONFIG_HOME/ytermusicd/config.toml
+# (usually ~/.config/ytermusicd/config.toml), or pass `--config <path>`.
+#
+# CLI flags and environment variables override these values:
+#   --bind / YTERMUSICD_BIND
+#   --port / YTERMUSICD_PORT
+#   --headers / YTERMUSICD_HEADERS
+#   --config / YTERMUSICD_CONFIG
+
+# bind = "127.0.0.1"
+# port = 8080
+# headers = "/home/user/.config/ytermusicd/headers.txt"
+
+# Maximum number of parallel downloads.
+parallel_downloads = 4
+
+# "ytdlp" or "rusty_ytdl".
+downloader = "ytdlp"
+
+# Enable MPRIS/D-Bus media controls.
+dbus = true
+
+# Initial player volume, 0-100.
+initial_volume = 50
