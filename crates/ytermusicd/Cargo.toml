@@ -15,5 +15,6 @@ tokio = { version = "1.36", features = ["macros", "net", "rt-multi-thread", "sig
 ytermusicd-core.workspace = true
 
 [dev-dependencies]
+common-structs.workspace = true
 reqwest = { version = "0.11", default-features = false, features = ["rustls-tls"] }
 serde_json = "1"
