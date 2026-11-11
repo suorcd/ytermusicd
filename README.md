@@ -134,7 +134,7 @@ just test
 ### Workspace layout
 
 - `crates/ytermusicd` — daemon binary (`serve`, `mcp`; in progress)
-- `crates/ytermusicd-core` — headless paths, config and auth
+- `crates/ytermusicd-core` — headless paths, config, auth, playback/queue and event bus
 - `crates/ytermusic` — legacy TUI client
 - `crates/ytpapi2` — YouTube Music API client
 - `crates/player` — audio playback
