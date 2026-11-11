@@ -60,8 +60,8 @@ track.
   `account_id.txt`; never committed or logged.
 - **Cache**: downloaded `<video-id>.mp4` and `<video-id>.json` files plus
   `db.bin`.
-- **Runtime state** (planned, #18): queue, current index, position, volume,
-  shuffle/repeat, written atomically and restored on startup.
+- Runtime state (#18): queue, current index, position, volume, shuffle/repeat,
+  written atomically and restored on startup.
 - **Legacy**: `last-playlist.json` from the TUI.
 
 The daemon uses the `com/suorcd/ytermusicd` directories and falls back to the

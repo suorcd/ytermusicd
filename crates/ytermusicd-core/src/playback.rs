@@ -1,6 +1,7 @@
 use crate::{
     events::{CoreEvent, EventBus, Snapshot},
     model::{PlaybackSnapshot, PlaybackStatus, Queue, RepeatMode, Track},
+    state::{PersistedState, STATE_VERSION, StateError},
 };
 use std::{
     path::{Path, PathBuf},
@@ -78,6 +79,48 @@ impl<S: AudioSink> PlaybackService<S> {
 
     pub fn queue_snapshot(&self) -> crate::model::QueueSnapshot {
         self.queue.snapshot()
+    }
+
+    /// Snapshot of the state that should survive a restart.
+    pub fn persisted_state(&self) -> PersistedState {
+        PersistedState {
+            version: STATE_VERSION,
+            tracks: self
+                .queue
+                .items()
+                .iter()
+                .map(|item| item.track.clone())
+                .collect(),
+            current: self.queue.current_index(),
+            repeat: self.queue.repeat(),
+            shuffle: self.queue.shuffle(),
+            volume: self.volume,
+            position_secs: self.position.as_secs_f64(),
+        }
+    }
+
+    pub fn save_state(&self, path: &Path) -> Result<(), StateError> {
+        self.persisted_state().save(path)
+    }
+
+    pub fn load_state(&mut self, path: &Path) -> Result<(), StateError> {
+        let state = PersistedState::load(path)?;
+        self.restore_state(&state)
+            .map_err(|error| StateError::Restore(error.to_string()))
+    }
+
+    pub fn restore_state(&mut self, state: &PersistedState) -> Result<(), PlaybackError> {
+        self.queue.restore(
+            state.tracks.clone(),
+            state.current,
+            state.repeat,
+            state.shuffle,
+        );
+        self.volume = state.volume.min(100);
+        self.position = Duration::from_secs_f64(state.position_secs.max(0.0));
+        self.status = PlaybackStatus::Stopped;
+        self.publish_all();
+        Ok(())
     }
 
     pub fn play_playlist(&mut self, tracks: Vec<Track>) -> Result<(), PlaybackError> {
@@ -522,5 +565,34 @@ mod tests {
         service.on_track_finished().unwrap();
         assert_eq!(service.snapshot().status, PlaybackStatus::Stopped);
         assert!(service.snapshot().current.is_none());
+    }
+
+    #[test]
+    fn persists_and_restores_queue_and_settings() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.json");
+        let mut source = service();
+        source.play_playlist(tracks(3)).unwrap();
+        source.play_index(1).unwrap();
+        source.set_volume(80).unwrap();
+        source.set_repeat(RepeatMode::All);
+        source.set_shuffle_with_seed(true, 42);
+        source.seek(Duration::from_secs(12)).unwrap();
+
+        let expected = source.queue_snapshot();
+        source.save_state(&path).unwrap();
+
+        let mut restored = service();
+        restored.load_state(&path).unwrap();
+        let queue = restored.queue_snapshot();
+        assert_eq!(queue.items, expected.items);
+        assert_eq!(queue.current, expected.current);
+        assert_eq!(queue.repeat, RepeatMode::All);
+        assert!(queue.shuffle);
+        assert_eq!(restored.snapshot().volume, 80);
+        assert_eq!(restored.snapshot().repeat, RepeatMode::All);
+        assert!(restored.snapshot().shuffle);
+        assert_eq!(restored.snapshot().position_secs, 12.0);
+        assert_eq!(restored.snapshot().status, PlaybackStatus::Stopped);
     }
 }
