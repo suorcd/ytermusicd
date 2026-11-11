@@ -1,0 +1,22 @@
+[Unit]
+Description=ytermusicd headless YouTube Music daemon
+Documentation=https://github.com/suorcd/ytermusicd
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=PATH=%h/.nix-profile/bin:/run/current-system/sw/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/env ytermusicd serve
+EnvironmentFile=-%h/.config/ytermusicd/env
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=20s
+StateDirectory=ytermusicd
+CacheDirectory=ytermusicd
+ConfigurationDirectory=ytermusicd
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target
