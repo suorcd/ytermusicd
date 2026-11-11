@@ -54,11 +54,14 @@ root `headers.txt` is already gitignored.
 
 ### Fixtures and mocks
 
-Current offline coverage is in `crates/ytpapi2`:
+Current offline coverage is in `crates/ytpapi2` and `crates/ytermusicd-core`:
 
 - `string_utils` tests cover cookie/header parsing helpers.
 - `json_extractor` tests cover search, playlist, continuation, album and
   nested video-ID parsing with inline JSON fixtures.
+- `ytermusicd-core` tests cover auth/config/paths, queue transitions,
+  repeat/shuffle restoration, download-failure handling and event-bus
+  snapshots using a mock audio sink.
 
 As the daemon and web UI land, extend this with:
 

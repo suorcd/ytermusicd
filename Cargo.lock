@@ -6546,11 +6546,14 @@ dependencies = [
 name = "ytermusicd-core"
 version = "0.1.0"
 dependencies = [
+ "common-structs",
  "directories",
+ "fastrand 2.3.0",
  "log",
  "serde",
  "tempfile",
  "thiserror 2.0.18",
+ "tokio",
  "toml",
  "ytpapi2",
 ]
