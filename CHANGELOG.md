@@ -8,6 +8,7 @@
 - Add `ytermusicd-core` for paths, config, header validation and auth status.
 - Add the headless queue/playback state machine, mock audio sink and typed event bus.
 - Persist queue, playback position, volume and shuffle/repeat state.
+- Harden downloads with atomic files, parsed progress, retries, cancellation-safe state and a status summary.
 - Add an optional `config.toml` and `--headers`/`--config` startup options.
 - Add a Nix flake with a reproducible development shell.
 - Add the local dev/test workflow (`just`, offline tests, smoke script).
