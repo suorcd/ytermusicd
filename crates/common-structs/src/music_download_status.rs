@@ -3,6 +3,7 @@ pub enum MusicDownloadStatus {
     NotDownloaded,
     Downloaded,
     Downloading(usize),
+    Retrying(u32),
     DownloadFailed,
 }
 
@@ -18,6 +19,7 @@ impl MusicDownloadStatus {
             }
             Self::Downloaded => ' ',
             Self::Downloading(progress) => return format!("⭳ [{:02}%]", progress),
+            Self::Retrying(attempt) => return format!("⟳ [{attempt}]"),
             Self::DownloadFailed => '⚠',
         }
         .into()
