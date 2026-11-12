@@ -27,7 +27,7 @@ SIGINT/SIGTERM. State is owned by the daemon, not by an individual client.
 | --- | --- | --- |
 | `crates/ytermusicd` | Current | CLI, HTTP server, MCP proxy entrypoint |
 | `ytermusicd-core` | Current (#6/#7) | Auth, config, paths, queue/playback and event bus; downloads/MPRIS planned |
-| `ytermusicd-api` | Planned (#11) | Shared DTOs, event types and generated TypeScript |
+| `ytermusicd-api` | Current (#11) | Shared DTOs, event types and generated TypeScript |
 | `crates/ytermusicd-web` | Planned (#14) | Svelte web UI |
 | `crates/ytpapi2` | Current | YouTube Music API client |
 | `crates/player` | Current | Audio decoding/playback |

@@ -47,6 +47,9 @@ jobs:
       - name: Run tests
         run: cargo test --workspace
 
+      - name: Check generated API bindings
+        run: git diff --exit-code -- crates/ytermusicd-api/bindings
+
   web:
     name: Web build
     runs-on: ubuntu-latest

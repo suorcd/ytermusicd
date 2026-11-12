@@ -7,6 +7,7 @@
 - Include auth, playback and queue snapshots in `/api/status`.
 - Add `ytermusicd-core` for paths, config, header validation and auth status.
 - Add the headless queue/playback state machine, mock audio sink and typed event bus.
+- Add shared API DTOs and generated TypeScript bindings in `ytermusicd-api`.
 - Persist queue, playback position, volume and shuffle/repeat state.
 - Harden downloads with atomic files, parsed progress, retries, cancellation-safe state and a status summary.
 - Add an optional `config.toml` and `--headers`/`--config` startup options.

@@ -136,6 +136,7 @@ just test
 
 - `crates/ytermusicd` — daemon binary (`serve`, `mcp`; in progress)
 - `crates/ytermusicd-core` — headless paths, config, auth, playback/queue and event bus
+- `crates/ytermusicd-api` — shared DTOs and generated TypeScript bindings
 - `crates/ytermusic` — legacy TUI client
 - `crates/ytpapi2` — YouTube Music API client
 - `crates/player` — audio playback
@@ -143,7 +144,7 @@ just test
 - `crates/download-manager` — download queue
 - `crates/common-structs` — shared status types
 
-Planned: `crates/ytermusicd-api` (shared DTOs) and `crates/ytermusicd-web`.
+Planned: `crates/ytermusicd-web`.
 
 ## API
 
