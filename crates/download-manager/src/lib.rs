@@ -361,6 +361,13 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
     use std::path::{Path, PathBuf};
     use tempfile::{TempDir, tempdir};
+    use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
+
+    static TEST_LOCK: AsyncMutex<()> = AsyncMutex::const_new(());
+
+    async fn serial() -> AsyncMutexGuard<'static, ()> {
+        TEST_LOCK.lock().await
+    }
 
     fn script(dir: &Path, body: &str) -> PathBuf {
         let path = dir.join("fake-yt-dlp");
@@ -416,6 +423,7 @@ mod tests {
 
     #[tokio::test]
     async fn successful_download_is_atomic_and_reports_progress() {
+        let _guard = serial().await;
         let dir = tempdir().unwrap();
         let path = script(dir.path(), &success_script(true));
         let (manager, downloads) = manager(&dir, path, 0);
@@ -442,6 +450,7 @@ mod tests {
 
     #[tokio::test]
     async fn failed_download_cleans_up_and_records_failure() {
+        let _guard = serial().await;
         let dir = tempdir().unwrap();
         let path = script(dir.path(), "echo boom >&2\nexit 1");
         let (manager, downloads) = manager(&dir, path, 0);
@@ -461,11 +470,12 @@ mod tests {
 
     #[tokio::test]
     async fn retries_then_succeeds() {
+        let _guard = serial().await;
         let dir = tempdir().unwrap();
-        let counter = dir.path().join("counter");
+        let lock = dir.path().join("first-attempt-lock");
         let body = format!(
-            "out=\"\"\nwhile [ $# -gt 0 ]; do case \"$1\" in -o) out=\"$2\"; shift 2;; *) shift;; esac; done\ncount=$(cat {counter} 2>/dev/null || echo 0)\ncount=$((count + 1))\necho $count > {counter}\nif [ $count -lt 2 ]; then echo 'temporary failure' >&2; exit 1; fi\necho fake-audio > \"$out\"\necho 'download:100.0%'",
-            counter = counter.display()
+            "out=\"\"\nwhile [ $# -gt 0 ]; do case \"$1\" in -o) out=\"$2\"; shift 2;; *) shift;; esac; done\nif mkdir {lock} 2>/dev/null; then echo 'temporary failure' >&2; exit 1; fi\necho fake-audio > \"$out\"\necho 'download:100.0%'",
+            lock = lock.display()
         );
         let path = script(dir.path(), &body);
         let (manager, downloads) = manager(&dir, path, 1);
@@ -484,6 +494,7 @@ mod tests {
 
     #[tokio::test]
     async fn already_downloaded_is_a_noop() {
+        let _guard = serial().await;
         let dir = tempdir().unwrap();
         let marker = dir.path().join("invoked");
         let body = format!("touch {}", marker.display());
@@ -500,6 +511,7 @@ mod tests {
 
     #[tokio::test]
     async fn cancellation_clears_active_download_state() {
+        let _guard = serial().await;
         let dir = tempdir().unwrap();
         let path = script(dir.path(), "sleep 2");
         let (manager, _downloads) = manager(&dir, path, 0);
