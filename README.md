@@ -53,6 +53,12 @@ cargo run -p ytermusicd -- --help
 cargo run -p ytermusicd -- serve
 ```
 
+Or run the packaged daemon directly:
+
+```sh
+nix run .#ytermusicd -- serve
+```
+
 In another shell:
 
 ```sh

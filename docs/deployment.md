@@ -1,5 +1,64 @@
 # Deployment
 
+## Nix package
+
+```sh
+nix build .#ytermusicd
+nix profile install .#ytermusicd
+nix run .#ytermusicd -- serve
+```
+
+The package wraps the binary with `yt-dlp` and `ffmpeg` on `PATH` and installs
+the systemd user unit under `$out/lib/systemd/user/`.
+
+## NixOS module
+
+The flake exposes `nixosModules.default` for headless/server deployments:
+
+```nix
+{
+  inputs.ytermusicd.url = "github:suorcd/ytermusicd";
+
+  outputs = { self, nixpkgs, ytermusicd, ... }: {
+    nixosConfigurations.host = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        ytermusicd.nixosModules.default
+        {
+          services.ytermusicd = {
+            enable = true;
+            bind = "127.0.0.1";
+            port = 8080;
+            environmentFile = "/run/secrets/ytermusicd.env";
+          };
+        }
+      ];
+    };
+  };
+}
+```
+
+The system service runs as the `ytermusicd` system user with `HOME` under
+`/var/lib/ytermusicd`; put `headers.txt` in
+`/var/lib/ytermusicd/.config/ytermusicd/headers.txt` or point
+`YTERMUSICD_HEADERS` at it via `environmentFile`. For desktop/MPRIS use the
+home-manager or systemd user unit instead, so the daemon runs inside the user
+session.
+
+## home-manager module
+
+```nix
+{
+  imports = [ inputs.ytermusicd.homeManagerModules.default ];
+  services.ytermusicd = {
+    enable = true;
+    environmentFile = "/home/you/.config/ytermusicd/env";
+  };
+}
+```
+
+## systemd user service
+
 ## systemd user service
 
 The repository ships a user unit at

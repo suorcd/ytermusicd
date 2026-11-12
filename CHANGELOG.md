@@ -15,6 +15,7 @@
 - Add the local dev/test workflow (`just`, offline tests, smoke script).
 - Add `AGENTS.md`, `CONTRIBUTING.md` and architecture docs.
 - Add a systemd user unit and deployment documentation.
+- Add a Nix package, NixOS module and home-manager module.
 
 Release history inherited from the upstream project is preserved in
 [docs/upstream-changelog.md](docs/upstream-changelog.md).
