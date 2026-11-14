@@ -9,7 +9,39 @@ nix run .#ytermusicd -- serve
 ```
 
 The package wraps the binary with `yt-dlp` and `ffmpeg` on `PATH` and installs
-the systemd user unit under `$out/lib/systemd/user/`.
+the systemd user unit under `$out/lib/systemd/user/`. The package builds the web
+UI and embeds it in the binary.
+
+## Reverse proxy and TLS
+
+The daemon API trusts local clients. Bind it to `127.0.0.1` and use a reverse
+proxy for remote access. The proxy must add authentication and TLS.
+
+Caddy example:
+
+```caddy
+music.example.com {
+  reverse_proxy 127.0.0.1:8080
+  basicauth {
+    user $2a$14$replace-with-a-real-hash
+  }
+}
+```
+
+nginx example:
+
+```nginx
+location / {
+  proxy_pass http://127.0.0.1:8080;
+  proxy_http_version 1.1;
+  proxy_set_header Host $host;
+  proxy_buffering off;
+}
+```
+
+`proxy_buffering off` keeps the SSE stream live. The daemon sends
+`X-Accel-Buffering: no` for the same reason. Do not expose the daemon port
+without a proxy.
 
 ## NixOS module
 
@@ -59,14 +91,12 @@ session.
 
 ## systemd user service
 
-## systemd user service
-
 The repository ships a user unit at
 [`packaging/systemd/ytermusicd.service`](../packaging/systemd/ytermusicd.service).
 
 ```sh
 # Install the binary somewhere on PATH (Nix profile shown here)
-nix profile install .#ytermusicd   # available once #23 lands
+nix profile install .#ytermusicd
 
 mkdir -p ~/.config/systemd/user
 cp packaging/systemd/ytermusicd.service ~/.config/systemd/user/
@@ -103,10 +133,11 @@ Authentication defaults to `~/.config/ytermusicd/headers.txt` (with a legacy
 
 ```sh
 curl http://127.0.0.1:8080/api/status
+curl http://127.0.0.1:8080/ | grep 'id="app"'
 playerctl -l
 ```
 
-`playerctl` should list `ytermusic` once MPRIS integration (#9) is merged.
+`playerctl` lists `ytermusic` while the daemon runs.
 
 ### Troubleshooting
 

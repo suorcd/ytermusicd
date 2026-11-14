@@ -118,6 +118,15 @@ display name `ytermusicd`. `playerctl -l` lists it while the daemon runs.
   to skip MPRIS entirely.
 - Non-Linux platforms compile a no-op MPRIS stub; no winit window is required.
 
+## MCP
+
+`ytermusicd mcp` is a stdio proxy to the REST API. It uses `rmcp` and holds no
+playback state. The proxy has 13 tools: search, playlists, playback transport,
+queue add, now playing, volume and download status. It reads the daemon URL from
+`--url` or `YTERMUSICD_URL`, applies a 30-second timeout, and exits when stdin
+closes. See [docs/mcp.md](mcp.md). Playlist editing, lyrics and HTTP transport
+are post-v1.
+
 ## Security
 
 - Cookies/SAPISID must never appear in logs or API responses.

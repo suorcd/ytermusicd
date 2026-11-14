@@ -7,6 +7,7 @@ use ytermusicd_core::{
 
 mod audio;
 mod downloads;
+mod mcp;
 mod mpris;
 mod music;
 mod server;
@@ -47,7 +48,11 @@ enum Command {
         config: Option<PathBuf>,
     },
     /// Run the stdio MCP proxy
-    Mcp,
+    Mcp {
+        /// Base URL of the running daemon
+        #[arg(long, env = "YTERMUSICD_URL")]
+        url: Option<String>,
+    },
 }
 
 fn main() -> ExitCode {
@@ -65,11 +70,21 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
-        Command::Mcp => {
-            eprintln!("ytermusicd mcp is not implemented yet (see issue #21)");
-            ExitCode::FAILURE
-        }
+        Command::Mcp { url } => match run_mcp(url) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("ytermusicd mcp failed: {error}");
+                ExitCode::FAILURE
+            }
+        },
     }
+}
+
+fn run_mcp(url: Option<String>) -> std::io::Result<()> {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+    runtime.block_on(mcp::run(url))
 }
 
 fn run_serve(
@@ -303,7 +318,17 @@ mod tests {
     #[test]
     fn parses_mcp() {
         let cli = Cli::try_parse_from(["ytermusicd", "mcp"]).unwrap();
-        assert!(matches!(cli.command, Command::Mcp));
+        assert!(matches!(cli.command, Command::Mcp { url: None }));
+    }
+
+    #[test]
+    fn parses_mcp_url() {
+        let cli =
+            Cli::try_parse_from(["ytermusicd", "mcp", "--url", "http://127.0.0.1:9000"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Mcp { url: Some(url) } if url == "http://127.0.0.1:9000"
+        ));
     }
 
     #[test]

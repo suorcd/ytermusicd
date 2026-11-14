@@ -41,3 +41,7 @@ web:
 # Smoke-test a running daemon; search/SSE checks require #12/#13.
 smoke:
     ./scripts/smoke.sh
+
+# Start a temporary daemon and smoke-test status, web, search, SSE and MCP.
+smoke-local:
+    ./scripts/smoke-local.sh

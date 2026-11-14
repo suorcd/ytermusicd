@@ -15,3 +15,4 @@ Records:
 - [0002 — The API is loopback-only by default](0002-loopback-only-api.md)
 - [0003 — The web UI uses Svelte + Vite + TypeScript](0003-svelte-web-ui.md)
 - [0004 — Fork-first with selective upstreaming](0004-upstream-strategy.md)
+- [0005 — v1 is read-only for playlists](0005-playlist-editing.md)
