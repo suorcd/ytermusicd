@@ -160,13 +160,37 @@ pub struct PlayPlaylistRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct PlayTrackRequest {
-    pub video_id: String,
+    pub track: Track,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct QueueRequest {
-    pub video_id: String,
+    pub track: Track,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct RemoveQueueRequest {
+    pub index: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct PlayNextRequest {
+    pub index: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ShuffleRequest {
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct RepeatRequest {
+    pub repeat: RepeatMode,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -205,6 +229,9 @@ pub enum EventKind {
     Download {
         video_id: String,
         status: DownloadStatus,
+    },
+    TrackEnded {
+        video_id: String,
     },
     Error {
         error: ApiError,

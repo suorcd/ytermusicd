@@ -2,8 +2,8 @@
 
 > **Work in progress.** `ytermusicd` is a headless daemon fork of
 > [ytermusic](https://github.com/ccgauche/ytermusic), adding a web UI, MPRIS and
-> MCP. The daemon skeleton and `/api/status` exist; playback/queue, the full
-> API, web UI and MCP are in progress.
+> MCP. The daemon, REST/SSE API, MPRIS and packaging work today; the web UI and
+> MCP proxy are in progress.
 
 [Build plan](https://sb.ser.ink/llm-wiki/concepts/ytermusicd-build-plan) ·
 [Roadmap](https://github.com/suorcd/ytermusicd/issues/25) ·
@@ -28,13 +28,13 @@ UI, MCP proxy and any future TUI are clients.
 | --- | --- |
 | Workspace, daemon skeleton, Nix dev shell | ✅ |
 | Local dev/test workflow (`just`, offline tests) | ✅ |
-| `ytermusicd serve` + `GET /api/status` | 🚧 skeleton |
-| Auth/config/path extraction | Planned |
-| Playback, queue, downloads, event bus, MPRIS | Planned |
-| Full REST + SSE API | Planned |
-| Web UI | Planned |
-| MCP proxy | Planned |
-| systemd/Nix package/first release | Planned |
+| Auth/config/path extraction | ✅ |
+| Playback, queue, event bus, MPRIS | ✅ |
+| Full REST + SSE API | ✅ |
+| systemd unit, Nix package/module | ✅ |
+| Web UI | 🚧 in progress |
+| MCP proxy | 🚧 in progress |
+| First release | Planned |
 
 See the [roadmap](https://github.com/suorcd/ytermusicd/issues/25) for the
 ordered backlog.
@@ -67,10 +67,8 @@ curl http://127.0.0.1:8080/api/status
 
 `serve` binds `127.0.0.1:8080` by default. Override it with `--bind`, `--port`,
 `YTERMUSICD_BIND` or `YTERMUSICD_PORT`. It shuts down gracefully on
-SIGINT/SIGTERM.
-
-> The status payload is currently a skeleton. Auth, playback and queue values
-> are filled in by issues #6 and #7.
+SIGINT/SIGTERM. See [docs/api.md](docs/api.md) for the full endpoint reference,
+SSE stream and curl examples.
 
 ## Authentication
 
@@ -131,6 +129,7 @@ just test
 ```
 
 - [docs/testing.md](docs/testing.md) — local workflow, fixtures, regression policy
+- [docs/api.md](docs/api.md) — REST/SSE reference, curl examples and reconnect semantics
 - [CONTRIBUTING.md](CONTRIBUTING.md) — contribution rules
 - [AGENTS.md](AGENTS.md) — worktree-per-issue workflow for agents
 - [docs/architecture.md](docs/architecture.md) — daemon/API/client design
@@ -154,12 +153,17 @@ Planned: `crates/ytermusicd-web`.
 
 ## API
 
-The v1 contract is defined in the build plan. Current endpoint:
+The daemon implements the full v1 REST + SSE contract. Examples:
 
-- `GET /api/status`
+```sh
+curl http://127.0.0.1:8080/api/status
+curl http://127.0.0.1:8080/api/playlists
+curl 'http://127.0.0.1:8080/api/search?q=civilization'
+curl -N http://127.0.0.1:8080/api/events
+```
 
-Planned: playlists, search, queue, playback commands and SSE. See
-[docs/architecture.md](docs/architecture.md) and the roadmap.
+See [docs/api.md](docs/api.md) for every endpoint, request/response shapes,
+error handling, SSE event types and `Last-Event-ID` replay.
 
 ## MCP
 

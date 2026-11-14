@@ -16,5 +16,5 @@ pub use model::{
     PlaybackSnapshot, PlaybackStatus, Queue, QueueItem, QueueSnapshot, RepeatMode, Track,
 };
 pub use paths::{Paths, PathsError};
-pub use playback::{AudioSink, PlaybackError, PlaybackService};
+pub use playback::{AudioSink, PlaybackCommand, PlaybackError, PlaybackService};
 pub use state::{PersistedState, STATE_VERSION, StateError};

@@ -20,6 +20,34 @@ pub trait AudioSink {
     fn stop(&mut self) -> Result<(), Self::Error>;
     fn seek(&mut self, position: Duration) -> Result<(), Self::Error>;
     fn set_volume(&mut self, volume: u8) -> Result<(), Self::Error>;
+    /// Whether the current track has finished. Real sinks should implement
+    /// this; test sinks can leave the default.
+    fn is_finished(&self) -> bool {
+        false
+    }
+}
+
+/// Commands accepted by the playback service from HTTP, MPRIS and MCP.
+#[derive(Debug, Clone)]
+pub enum PlaybackCommand {
+    PlayPlaylist(Vec<Track>),
+    PlayTrack(Track),
+    Enqueue(Track),
+    Remove(usize),
+    MoveItem { from: usize, to: usize },
+    Clear,
+    Stop,
+    PlayIndex(usize),
+    Pause,
+    Resume,
+    Toggle,
+    Next,
+    Previous,
+    Seek(Duration),
+    SeekBy(f64),
+    SetVolume(u8),
+    SetShuffle(bool),
+    SetRepeat(RepeatMode),
 }
 
 #[derive(Debug, Error)]
@@ -79,6 +107,56 @@ impl<S: AudioSink> PlaybackService<S> {
 
     pub fn queue_snapshot(&self) -> crate::model::QueueSnapshot {
         self.queue.snapshot()
+    }
+
+    /// Poll the audio sink and advance automatically when a track ends.
+    pub fn tick(&mut self) -> Result<(), PlaybackError> {
+        if self.status == PlaybackStatus::Playing && self.sink.is_finished() {
+            self.on_track_finished()?;
+        }
+        Ok(())
+    }
+
+    /// Apply a command from an API/MPRIS/MCP client.
+    pub fn handle_command(&mut self, command: PlaybackCommand) -> Result<(), PlaybackError> {
+        match command {
+            PlaybackCommand::PlayPlaylist(tracks) => self.play_playlist(tracks),
+            PlaybackCommand::PlayTrack(track) => self.play_track(track),
+            PlaybackCommand::Enqueue(track) => {
+                self.enqueue(track);
+                Ok(())
+            }
+            PlaybackCommand::Remove(index) => self.remove(index),
+            PlaybackCommand::MoveItem { from, to } => {
+                self.move_item(from, to);
+                Ok(())
+            }
+            PlaybackCommand::Clear => self.clear(),
+            PlaybackCommand::Stop => {
+                self.stop();
+                Ok(())
+            }
+            PlaybackCommand::PlayIndex(index) => self.play_index(index),
+            PlaybackCommand::Pause => self.pause(),
+            PlaybackCommand::Resume => self.resume(),
+            PlaybackCommand::Toggle => self.toggle(),
+            PlaybackCommand::Next => self.next_track(),
+            PlaybackCommand::Previous => self.previous_track(),
+            PlaybackCommand::Seek(position) => self.seek(position),
+            PlaybackCommand::SeekBy(delta) => {
+                let position = (self.position.as_secs_f64() + delta).max(0.0);
+                self.seek(Duration::from_secs_f64(position))
+            }
+            PlaybackCommand::SetVolume(volume) => self.set_volume(volume),
+            PlaybackCommand::SetShuffle(enabled) => {
+                self.set_shuffle(enabled);
+                Ok(())
+            }
+            PlaybackCommand::SetRepeat(repeat) => {
+                self.set_repeat(repeat);
+                Ok(())
+            }
+        }
     }
 
     /// Snapshot of the state that should survive a restart.
@@ -164,6 +242,10 @@ impl<S: AudioSink> PlaybackService<S> {
         self.position = Duration::ZERO;
         self.publish_all();
         Ok(())
+    }
+
+    pub fn stop(&mut self) {
+        self.stop_playback();
     }
 
     pub fn play_index(&mut self, index: usize) -> Result<(), PlaybackError> {
@@ -365,6 +447,7 @@ mod tests {
         plays: Vec<(String, PathBuf)>,
         actions: Vec<&'static str>,
         volume: u8,
+        finished: bool,
     }
 
     impl AudioSink for MockSink {
@@ -401,6 +484,10 @@ mod tests {
             self.volume = volume;
             self.actions.push("volume");
             Ok(())
+        }
+
+        fn is_finished(&self) -> bool {
+            self.finished
         }
     }
 
@@ -565,6 +652,32 @@ mod tests {
         service.on_track_finished().unwrap();
         assert_eq!(service.snapshot().status, PlaybackStatus::Stopped);
         assert!(service.snapshot().current.is_none());
+    }
+
+    #[test]
+    fn tick_advances_when_sink_is_finished() {
+        let mut service = service();
+        service.play_playlist(tracks(2)).unwrap();
+        service.sink.finished = true;
+        service.tick().unwrap();
+        assert_eq!(service.snapshot().current.unwrap().video_id, "video-1");
+    }
+
+    #[test]
+    fn dispatch_command_controls_service() {
+        let mut service = service();
+        service
+            .handle_command(PlaybackCommand::PlayPlaylist(tracks(2)))
+            .unwrap();
+        assert_eq!(service.snapshot().current.unwrap().video_id, "video-0");
+        service.handle_command(PlaybackCommand::Pause).unwrap();
+        assert_eq!(service.snapshot().status, PlaybackStatus::Paused);
+        service
+            .handle_command(PlaybackCommand::SetVolume(70))
+            .unwrap();
+        assert_eq!(service.snapshot().volume, 70);
+        service.handle_command(PlaybackCommand::Next).unwrap();
+        assert_eq!(service.snapshot().current.unwrap().video_id, "video-1");
     }
 
     #[test]

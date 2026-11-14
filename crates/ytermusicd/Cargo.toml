@@ -6,15 +6,25 @@ license = "Apache-2.0"
 description = "Headless YouTube Music daemon with a web UI, MPRIS and MCP"
 
 [dependencies]
+async-stream = "0.3"
+async-trait = "0.1"
 axum = "0.8"
 clap = { version = "4.5", features = ["derive", "env"] }
+common-structs.workspace = true
 env_logger = "0.11"
+flume = "0.11"
+futures-util = "0.3"
 log = "0.4"
+player.workspace = true
 serde = { version = "1", features = ["derive"] }
-tokio = { version = "1.36", features = ["macros", "net", "rt-multi-thread", "signal"] }
+serde_json = "1"
+souvlaki = "0.7.3"
+tokio = { version = "1.36", features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+ytermusicd-api.workspace = true
 ytermusicd-core.workspace = true
+ytpapi2.workspace = true
 
 [dev-dependencies]
 common-structs.workspace = true
-reqwest = { version = "0.11", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls", "stream"] }
 serde_json = "1"

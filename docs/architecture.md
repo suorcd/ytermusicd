@@ -25,8 +25,8 @@ SIGINT/SIGTERM. State is owned by the daemon, not by an individual client.
 
 | Component | Status | Responsibility |
 | --- | --- | --- |
-| `crates/ytermusicd` | Current | CLI, HTTP server, MCP proxy entrypoint |
-| `ytermusicd-core` | Current (#6/#7) | Auth, config, paths, queue/playback and event bus; downloads/MPRIS planned |
+| `crates/ytermusicd` | Current | CLI, HTTP/SSE server, MPRIS integration, MCP proxy entrypoint |
+| `ytermusicd-core` | Current (#6/#7) | Auth, config, paths, queue/playback and event bus |
 | `ytermusicd-api` | Current (#11) | Shared DTOs, event types and generated TypeScript |
 | `crates/ytermusicd-web` | Planned (#14) | Svelte web UI |
 | `crates/ytpapi2` | Current | YouTube Music API client |
@@ -70,21 +70,43 @@ keeps its existing cache/config directories.
 
 ## API
 
-The v1 contract is documented in the build plan and will be implemented in
-#12/#13 using DTOs from `ytermusicd-api` (#11):
+The full contract and curl examples live in [docs/api.md](api.md). DTOs come
+from `ytermusicd-api`, which also generates the TypeScript bindings consumed by
+the web UI and MCP proxy.
 
-- status, playlists, playlist detail, search, queue;
-- play playlist/track, enqueue, pause/resume, next/previous, volume;
-- SSE events for playback, queue, downloads, errors and library changes.
+- REST: status, playlists, playlist detail, search, queue CRUD/reorder, play
+  playlist/track, pause/resume, next/previous, volume, seek, shuffle, repeat.
+- Every command returns the updated `Status` or `Queue`, so clients can render
+  without waiting for the event stream.
+- SSE: an initial snapshot followed by playback, queue, download, track-ended,
+  error and library events. Event ids are monotonic and a 256-event ring
+  supports `Last-Event-ID` replay; stale clients get a fresh snapshot.
+- Errors use one JSON envelope. The API is loopback-only by default and does not
+  enable wildcard CORS.
 
-Errors use one JSON envelope. The API is loopback-only by default and does not
-enable wildcard CORS.
+## Media controls (MPRIS)
+
+On Linux the daemon starts a `souvlaki` MPRIS client on a dedicated thread when
+`player.dbus = true` (the default). Clients see the identity `ytermusic` and
+display name `ytermusicd`. `playerctl -l` lists it while the daemon runs.
+
+- Supported: play/pause/toggle, next, previous, stop, seek forward/backward by
+  the requested amount, set position and set volume.
+- Metadata and playback progress come from the event bus, so shell widgets and
+  the HTTP API always agree.
+- `OpenUri` and `Raise` are explicitly ignored (logged at info/debug level)
+  instead of panicking: the daemon has no window to raise and does not accept
+  arbitrary URIs.
+- If D-Bus is unavailable, startup logs a warning and the daemon continues
+  headless; the HTTP API and playback are unaffected. Set `player.dbus = false`
+  to skip MPRIS entirely.
+- Non-Linux platforms compile a no-op MPRIS stub; no winit window is required.
 
 ## Security
 
 - Cookies/SAPISID must never appear in logs or API responses.
 - The API binds to loopback unless explicitly configured otherwise.
-- The systemd unit (planned #22) runs as a user service with hardening.
+- The systemd unit runs as a user service with hardening.
 - MCP is a local stdio proxy; it holds no playback state.
 
 ## Decisions
