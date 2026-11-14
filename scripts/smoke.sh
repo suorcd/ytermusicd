@@ -15,6 +15,12 @@ if ! curl -fsS --max-time 5 "$BASE_URL/api/status" >/dev/null; then
 fi
 echo "status: ok"
 
+if ! curl -fsS --max-time 5 "$BASE_URL/" | grep -q 'id="app"'; then
+  echo "error: web UI is not served at /" >&2
+  exit 1
+fi
+echo "web: ok"
+
 if ! curl -fsS --max-time 15 "$BASE_URL/api/search?q=civilization" >/dev/null; then
   echo "error: search endpoint failed" >&2
   exit 1

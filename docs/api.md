@@ -9,7 +9,9 @@ bindings are generated from the same definitions in
 ## Base URL and trust model
 
 The default address is `http://127.0.0.1:8080`. Override it with `--bind`,
-`--port`, `YTERMUSICD_BIND` or `YTERMUSICD_PORT`.
+`--port`, `YTERMUSICD_BIND` or `YTERMUSICD_PORT`. The daemon serves the web UI
+at `/` and the JSON API under `/api`. Client-side routes fall back to
+`index.html`; unknown `/api` paths return 404.
 
 The API is loopback-only by default and intentionally has no authentication:
 any local process that can reach the port can control playback. Do not expose
@@ -252,10 +254,12 @@ Event kinds (`EventKind` in the bindings):
 ### Reconnect and replay
 
 Event ids are monotonically increasing. The daemon retains the last 256 events.
-To resume, send the last seen id in the standard `Last-Event-ID` header:
+To resume, send the last seen id in the standard `Last-Event-ID` header or the
+`last_event_id` query parameter:
 
 ```sh
 curl -N -H 'Last-Event-ID: 2' http://127.0.0.1:8080/api/events
+curl -N 'http://127.0.0.1:8080/api/events?last_event_id=2'
 ```
 
 - If the requested id is still in the replay window, the daemon replays only

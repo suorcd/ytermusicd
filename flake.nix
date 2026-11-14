@@ -13,6 +13,20 @@
       ];
       forAllSystems = nixpkgs.lib.genAttrs systems;
 
+      webFor =
+        system:
+        let
+          pkgs = import nixpkgs { inherit system; };
+        in
+        pkgs.buildNpmPackage {
+          pname = "ytermusicd-web";
+          version = "0.1.0";
+          src = ./crates/ytermusicd-web;
+          npmDepsHash = "sha256-R3k09yaMewaNojUaQJyN6JL9UnadoWBzbc5h2PF2PVU=";
+          buildPhase = "npm run build";
+          installPhase = "cp -r dist $out";
+        };
+
       ytermusicdFor =
         system:
         let
@@ -34,7 +48,23 @@
           cargoBuildFlags = [ "--package" "ytermusicd" ];
           doCheck = false;
 
-          nativeBuildInputs = [ pkgs.makeWrapper ];
+          preBuild = ''
+            mkdir -p crates/ytermusicd-web/dist
+            cp -r ${webFor system}/. crates/ytermusicd-web/dist/
+          '';
+
+          nativeBuildInputs = [ pkgs.makeWrapper pkgs.pkg-config ];
+
+          buildInputs =
+            with pkgs;
+            [
+              openssl
+              sqlite
+            ]
+            ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [
+              alsa-lib
+              dbus
+            ];
 
           postInstall = ''
             wrapProgram $out/bin/ytermusicd \

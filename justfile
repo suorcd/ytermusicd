@@ -10,6 +10,7 @@ check:
 
 test:
     cargo test --workspace
+    @if [ -d crates/ytermusicd-web/node_modules ]; then cd crates/ytermusicd-web && npm test; else echo "web tests skipped (run 'just web-install')"; fi
 
 # Includes tests that need real YouTube Music credentials and network access.
 test-all:
@@ -25,10 +26,17 @@ clippy:
 dev:
     cargo run -p ytermusicd -- serve
 
-# Build/serve the web UI; arrives with #14.
+# Install web UI dependencies.
+web-install:
+    cd crates/ytermusicd-web && npm ci
+
+# Type-check and build the web UI.
+web-check:
+    cd crates/ytermusicd-web && npm run check && npm run build
+
+# Run the Vite dev server; /api is proxied to the daemon.
 web:
-    @echo "web UI not implemented yet (see #14)"
-    @exit 1
+    cd crates/ytermusicd-web && npm run dev
 
 # Smoke-test a running daemon; search/SSE checks require #12/#13.
 smoke:

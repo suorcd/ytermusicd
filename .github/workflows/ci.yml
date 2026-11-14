@@ -80,6 +80,16 @@ jobs:
         working-directory: crates/ytermusicd-web
         run: npm ci
 
+      - name: Check web types
+        if: steps.detect.outputs.present == 'true'
+        working-directory: crates/ytermusicd-web
+        run: npm run check
+
+      - name: Test web UI
+        if: steps.detect.outputs.present == 'true'
+        working-directory: crates/ytermusicd-web
+        run: npm test
+
       - name: Build web UI
         if: steps.detect.outputs.present == 'true'
         working-directory: crates/ytermusicd-web

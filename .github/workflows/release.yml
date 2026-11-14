@@ -45,8 +45,13 @@ jobs:
         with:
           key: release-${{ matrix.target }}
 
-      - name: Build ytermusicd
-        run: cargo build --release --target ${{ matrix.target }} -p ytermusicd
+      - name: Install Node.js (if web UI is present)
+        if: ${{ hashFiles('crates/ytermusicd-web/package.json') != '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: crates/ytermusicd-web/package-lock.json
 
       - name: Build web UI (if present)
         if: ${{ hashFiles('crates/ytermusicd-web/package.json') != '' }}
@@ -54,6 +59,9 @@ jobs:
         run: |
           npm ci
           npm run build
+
+      - name: Build ytermusicd
+        run: cargo build --release --target ${{ matrix.target }} -p ytermusicd
 
       - name: Package (Unix)
         if: runner.os != 'Windows'

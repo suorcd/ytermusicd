@@ -158,6 +158,7 @@ pub fn router<S: AudioSink + Send + 'static>(state: AppState<S>) -> Router {
         .route("/api/repeat", post(repeat))
         .route("/api/downloads/retry", post(retry_download))
         .route("/api/events", get(events))
+        .fallback(crate::web::static_handler)
         .with_state(state)
 }
 
@@ -204,6 +205,12 @@ async fn playlist<S: AudioSink + Send + 'static>(
 #[derive(Debug, Deserialize)]
 struct SearchQuery {
     q: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct EventsQuery {
+    #[serde(default)]
+    last_event_id: Option<u64>,
 }
 
 async fn search<S: AudioSink + Send + 'static>(
@@ -443,11 +450,13 @@ async fn queue_play_next<S: AudioSink + Send + 'static>(
 async fn events<S: AudioSink + Send + 'static>(
     State(state): State<AppState<S>>,
     headers: HeaderMap,
+    Query(query): Query<EventsQuery>,
 ) -> impl IntoResponse {
     let last_event_id = headers
         .get("last-event-id")
         .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.trim().parse::<u64>().ok());
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .or(query.last_event_id);
     let subscription = state.events.subscribe_since(last_event_id);
     let snapshot_status = status_from_parts(
         &state,
@@ -1408,6 +1417,49 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn sse_replays_events_from_the_query_parameter() {
+        let (base, server) = start_server(test_state()).await;
+        let client = reqwest::Client::new();
+
+        let response = client
+            .get(format!("{base}/api/events"))
+            .send()
+            .await
+            .unwrap();
+        let mut stream = Box::pin(response.bytes_stream());
+        let mut buffer = String::new();
+        read_until(&mut stream, &mut buffer, "event: snapshot").await;
+
+        client
+            .post(format!("{base}/api/volume"))
+            .json(&VolumeRequest { volume: 80 })
+            .send()
+            .await
+            .unwrap();
+        read_until(&mut stream, &mut buffer, "\"volume\":80").await;
+        let resume_from = last_event_id(&buffer);
+        drop(stream);
+
+        client
+            .post(format!("{base}/api/volume"))
+            .json(&VolumeRequest { volume: 60 })
+            .send()
+            .await
+            .unwrap();
+
+        let response = client
+            .get(format!("{base}/api/events?last_event_id={resume_from}"))
+            .send()
+            .await
+            .unwrap();
+        let mut stream = Box::pin(response.bytes_stream());
+        let mut replay = String::new();
+        read_until(&mut stream, &mut replay, "\"volume\":60").await;
+        assert!(!replay.contains("event: snapshot"));
+        server.abort();
+    }
+
+    #[tokio::test]
     async fn sse_unknown_last_event_id_resyncs_with_snapshot() {
         let (base, server) = start_server(test_state()).await;
         let client = reqwest::Client::new();
@@ -1421,6 +1473,45 @@ mod tests {
         let mut buffer = String::new();
         read_until(&mut stream, &mut buffer, "event: snapshot").await;
         assert_eq!(last_event_id(&buffer), 0);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn serves_web_ui_and_spa_fallback() {
+        let (base, server) = start_server(test_state()).await;
+        let client = reqwest::Client::new();
+
+        let root = client.get(format!("{base}/")).send().await.unwrap();
+        assert_eq!(root.status(), 200);
+        assert!(
+            root.headers()["content-type"]
+                .to_str()
+                .unwrap()
+                .starts_with("text/html")
+        );
+        assert!(root.text().await.unwrap().contains("id=\"app\""));
+
+        let deep = client
+            .get(format!("{base}/library/playlist"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(deep.status(), 200);
+        assert!(deep.text().await.unwrap().contains("id=\"app\""));
+
+        let missing_asset = client
+            .get(format!("{base}/assets/missing.js"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(missing_asset.status(), reqwest::StatusCode::NOT_FOUND);
+
+        let missing_api = client
+            .get(format!("{base}/api/missing"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(missing_api.status(), reqwest::StatusCode::NOT_FOUND);
         server.abort();
     }
 

@@ -10,6 +10,7 @@ mod downloads;
 mod mpris;
 mod music;
 mod server;
+mod web;
 
 use crate::{
     audio::RodioSink,

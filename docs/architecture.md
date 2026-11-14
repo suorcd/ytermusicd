@@ -28,7 +28,7 @@ SIGINT/SIGTERM. State is owned by the daemon, not by an individual client.
 | `crates/ytermusicd` | Current | CLI, HTTP/SSE server, MPRIS integration, MCP proxy entrypoint |
 | `ytermusicd-core` | Current (#6/#7) | Auth, config, paths, queue/playback and event bus |
 | `ytermusicd-api` | Current (#11) | Shared DTOs, event types and generated TypeScript |
-| `crates/ytermusicd-web` | Planned (#14) | Svelte web UI |
+| `crates/ytermusicd-web` | Current (#14–#17) | Svelte 5 web UI (embedded at build time) |
 | `crates/ytpapi2` | Current | YouTube Music API client |
 | `crates/player` | Current | Audio decoding/playback |
 | `crates/database` | Current | Local download database |
@@ -52,6 +52,10 @@ Commands are validated, applied to the core state, and then published as typed
 events. New SSE clients receive a snapshot followed by incremental events.
 Clients render from the snapshot/event stream and never poll for the current
 track.
+
+The web UI is a Svelte 5 app. It is built with Vite and embedded into the
+daemon with `rust-embed`. The daemon serves it at `/` with a client-side
+routing fallback. See [docs/web.md](web.md).
 
 ## State and storage
 
