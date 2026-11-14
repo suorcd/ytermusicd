@@ -1,8 +1,18 @@
 use clap::{Parser, Subcommand};
-use std::{path::PathBuf, process::ExitCode};
-use ytermusicd_core::{AuthStatus, DaemonConfig, Paths, resolve_auth};
+use std::{path::PathBuf, process::ExitCode, sync::Arc, time::Duration};
+use tokio::sync::{Mutex, mpsc};
+use ytermusicd_api::DownloadSummary;
+use ytermusicd_core::{AuthStatus, DaemonConfig, Paths, PlaybackService, resolve_auth};
 
+mod audio;
+mod mpris;
+mod music;
 mod server;
+
+use crate::{
+    audio::RodioSink,
+    music::{MusicApi, UnavailableMusicApi, YoutubeMusicApi},
+};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -83,7 +93,7 @@ fn run_serve(
     let port = port.or(config.port).unwrap_or(8080);
     let headers = headers.or(config.headers);
 
-    let auth_status = match resolve_auth(&paths, headers.as_deref()) {
+    let (auth_status, auth) = match resolve_auth(&paths, headers.as_deref()) {
         Ok(loaded) => {
             log::info!("loaded auth from {}", loaded.source.display());
             if loaded.legacy {
@@ -92,7 +102,7 @@ fn run_serve(
                     paths.headers_file().display()
                 );
             }
-            AuthStatus::ok(loaded.source)
+            (AuthStatus::ok(loaded.source), Some(loaded.auth))
         }
         Err(error) => {
             log::error!("{error}");
@@ -108,12 +118,65 @@ fn run_serve(
         }
     };
 
+    let dbus = config.dbus;
+    let cache_dir = paths.cache_dir.clone();
     log::info!("starting ytermusicd serve on {bind}:{port}");
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
 
-    runtime.block_on(server::serve(&bind, port, auth_status))
+    runtime.block_on(async move {
+        let music: Arc<dyn MusicApi> = match auth {
+            Some(auth) => match auth.create_client().await {
+                Ok(client) => {
+                    log::info!("YouTube Music client ready");
+                    Arc::new(YoutubeMusicApi::new(client))
+                }
+                Err(error) => {
+                    log::error!("could not create YouTube Music client: {error:?}");
+                    Arc::new(UnavailableMusicApi)
+                }
+            },
+            None => Arc::new(UnavailableMusicApi),
+        };
+
+        let sink = RodioSink::spawn();
+        let playback = Arc::new(Mutex::new(PlaybackService::new(sink, cache_dir)));
+        let (commands, mut command_rx) = mpsc::unbounded_channel();
+        let command_playback = playback.clone();
+        tokio::spawn(async move {
+            while let Some(command) = command_rx.recv().await {
+                let mut service = command_playback.lock().await;
+                if let Err(error) = service.handle_command(command) {
+                    log::warn!("playback command failed: {error:?}");
+                }
+            }
+        });
+
+        let tick_playback = playback.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_millis(500));
+            loop {
+                interval.tick().await;
+                let mut service = tick_playback.lock().await;
+                if let Err(error) = service.tick() {
+                    log::warn!("playback tick failed: {error:?}");
+                }
+            }
+        });
+
+        server::serve(
+            &bind,
+            port,
+            auth_status,
+            music,
+            playback,
+            DownloadSummary::default(),
+            commands,
+            dbus,
+        )
+        .await
+    })
 }
 
 fn init_logging() {

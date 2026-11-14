@@ -117,12 +117,13 @@ YTERMUSICD_URL=http://127.0.0.1:8080 ./scripts/smoke.sh
 ```
 
 The script checks `/api/status`, search, at least one SSE event, and MPRIS via
-`playerctl` when available. The search and SSE checks require #12/#13; until
-then the script stops after `/api/status`.
+`playerctl` when available. The daemon must have valid headers for the search
+check; without them it returns 502 and the smoke test fails. Run it against a
+daemon started with temporary state, or skip the search check by inspecting the
+individual curl commands in [docs/api.md](api.md).
 
 ## Current gaps
 
-The daemon skeleton and `GET /api/status` exist. The full REST/SSE API, web UI,
-MCP proxy, systemd unit and Nix package are still in progress. `just smoke`
-covers `/api/status` today; the search/SSE checks arrive with #12/#13, and the
-`just web` recipe is a placeholder until #14.
+The daemon, REST/SSE API, MPRIS and systemd/Nix packaging exist. The web UI and
+MCP proxy are still in progress; `just web` is a placeholder until #14, and
+`ytermusicd mcp` exits with a "not implemented" error until #21.

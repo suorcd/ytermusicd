@@ -9,3 +9,4 @@ database = { path = "crates/database" }
 download-manager = { path = "crates/download-manager" }
 common-structs = { path = "crates/common-structs" }
 ytermusicd-core = { path = "crates/ytermusicd-core" }
+ytermusicd-api = { path = "crates/ytermusicd-api" }

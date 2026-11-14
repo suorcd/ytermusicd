@@ -5,4 +5,4 @@ import type { PlaybackSnapshot } from "./PlaybackSnapshot";
 import type { Queue } from "./Queue";
 import type { Status } from "./Status";
 
-export type EventKind = { "type": "snapshot", status: Status, queue: Queue, } | { "type": "playback", playback: PlaybackSnapshot, } | { "type": "queue", queue: Queue, } | { "type": "download", video_id: string, status: DownloadStatus, } | { "type": "error", error: ApiError, } | { "type": "library_changed" };
+export type EventKind = { "type": "snapshot", status: Status, queue: Queue, } | { "type": "playback", playback: PlaybackSnapshot, } | { "type": "queue", queue: Queue, } | { "type": "download", video_id: string, status: DownloadStatus, } | { "type": "track_ended", video_id: string, } | { "type": "error", error: ApiError, } | { "type": "library_changed" };
