@@ -2,8 +2,8 @@
 
 > **Work in progress.** `ytermusicd` is a headless daemon fork of
 > [ytermusic](https://github.com/ccgauche/ytermusic), adding a web UI, MPRIS and
-> MCP. The daemon, REST/SSE API, MPRIS and packaging work today; the web UI and
-> MCP proxy are in progress.
+> MCP. The daemon, REST/SSE API, web UI, MPRIS and packaging work today; the MCP
+> proxy is in progress.
 
 [Build plan](https://sb.ser.ink/llm-wiki/concepts/ytermusicd-build-plan) ·
 [Roadmap](https://github.com/suorcd/ytermusicd/issues/25) ·
@@ -14,7 +14,7 @@
 `ytermusicd` keeps YouTube Music playback, queue and downloads in a long-running
 daemon. Clients are thin:
 
-- **Web UI** (planned) — library, search, queue and now-playing views.
+- **Web UI** — library, search, queue, now playing and vim-style keys.
 - **MCP** (planned) — a stdio proxy exposing search/playback tools to assistants.
 - **MPRIS** — desktop media controls (`playerctl`, shell media widgets).
 - **Legacy TUI** — the existing `ytermusic` client remains available.
@@ -31,8 +31,8 @@ UI, MCP proxy and any future TUI are clients.
 | Auth/config/path extraction | ✅ |
 | Playback, queue, downloads, event bus, MPRIS | ✅ |
 | Full REST + SSE API | ✅ |
+| Web UI (library, search, queue, now playing, vim keys) | ✅ |
 | systemd unit, Nix package/module | ✅ |
-| Web UI | 🚧 in progress |
 | MCP proxy | 🚧 in progress |
 | First release | Planned |
 
@@ -67,8 +67,13 @@ curl http://127.0.0.1:8080/api/status
 
 `serve` binds `127.0.0.1:8080` by default. Override it with `--bind`, `--port`,
 `YTERMUSICD_BIND` or `YTERMUSICD_PORT`. It shuts down gracefully on
-SIGINT/SIGTERM. See [docs/api.md](docs/api.md) for the full endpoint reference,
-SSE stream and curl examples.
+SIGINT/SIGTERM. Open `http://127.0.0.1:8080` for the web UI. See
+[docs/api.md](docs/api.md) for the full endpoint reference, SSE stream and curl
+examples.
+
+The repository build embeds the web app. If the UI shows a "not built" page,
+run `just web-install && just web-check`, then restart the daemon. For frontend
+development, use `just web` and the Vite proxy.
 
 ## Authentication
 
@@ -130,6 +135,7 @@ just test
 
 - [docs/testing.md](docs/testing.md) — local workflow, fixtures, regression policy
 - [docs/api.md](docs/api.md) — REST/SSE reference, curl examples and reconnect semantics
+- [docs/web.md](docs/web.md) — web UI development, keymap and failure states
 - [CONTRIBUTING.md](CONTRIBUTING.md) — contribution rules
 - [AGENTS.md](AGENTS.md) — worktree-per-issue workflow for agents
 - [docs/architecture.md](docs/architecture.md) — daemon/API/client design
@@ -142,14 +148,13 @@ just test
 - `crates/ytermusicd` — daemon binary (`serve`, `mcp`; in progress)
 - `crates/ytermusicd-core` — headless paths, config, auth, playback/queue and event bus
 - `crates/ytermusicd-api` — shared DTOs and generated TypeScript bindings
+- `crates/ytermusicd-web` — Svelte 5 web UI (embedded in the daemon)
 - `crates/ytermusic` — legacy TUI client
 - `crates/ytpapi2` — YouTube Music API client
 - `crates/player` — audio playback
 - `crates/database` — local download database
 - `crates/download-manager` — download queue
 - `crates/common-structs` — shared status types
-
-Planned: `crates/ytermusicd-web`.
 
 ## API
 
@@ -166,6 +171,7 @@ See [docs/api.md](docs/api.md) for every endpoint, request/response shapes,
 error handling, SSE event types and `Last-Event-ID` replay. Playing a playlist
 or track automatically queues the audio for download; playback starts when the
 cached file is ready, and failed downloads can be retried from the API or UI.
+The daemon serves the web UI at `/` and the API under `/api`.
 
 ## MCP
 

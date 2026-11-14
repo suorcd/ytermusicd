@@ -16,7 +16,10 @@ nix develop
 | `just test-all` | Includes ignored tests that need real YouTube Music credentials/network |
 | `just fmt` | Format the workspace |
 | `just clippy` | Clippy only |
-| `just dev` | Run the current client (TUI until the daemon exists) |
+| `just dev` | Run the daemon with the default bind/port |
+| `just web-install` | Install web UI dependencies (`npm ci`) |
+| `just web` | Run the Vite dev server with an `/api` proxy |
+| `just web-check` | Type-check and build the web UI |
 | `just smoke` | Smoke-test a running daemon (`scripts/smoke.sh`) |
 
 `just` is provided by the Nix dev shell and listed in the README prerequisites
@@ -31,7 +34,8 @@ for non-Nix setups.
    cookies, a network connection, an audio device or DBus.
 3. **Credentialed tests** are marked `#[ignore]`. The `ytpapi2` tests are the
    current example: they read a real `headers.txt` and call YouTube Music.
-4. **Smoke tests** run against a real daemon and are scripted in
+4. **Web tests** use Vitest and Testing Library in `crates/ytermusicd-web`.
+5. **Smoke tests** run against a real daemon and are scripted in
    `scripts/smoke.sh`.
 
 ### Credentialed tests
@@ -54,24 +58,28 @@ root `headers.txt` is already gitignored.
 
 ### Fixtures and mocks
 
-Current offline coverage is in `crates/ytpapi2` and `crates/ytermusicd-core`:
+Current offline coverage is in `crates/ytpapi2`, `crates/ytermusicd-core`,
+`crates/ytermusicd` and `crates/ytermusicd-web`:
 
 - `string_utils` tests cover cookie/header parsing helpers.
 - `json_extractor` tests cover search, playlist, continuation, album and
   nested video-ID parsing with inline JSON fixtures.
 - `ytermusicd-core` tests cover auth/config/paths, queue transitions,
-  repeat/shuffle restoration, download-failure handling and event-bus
-  snapshots using a mock audio sink.
+  repeat/shuffle restoration, download-failure handling, playback position and
+  event-bus replay using a mock audio sink.
+- `ytermusicd` integration tests start the router on an ephemeral port and
+  cover every REST endpoint, SSE replay, download retry, static serving and
+  upstream error envelopes.
+- Web tests cover the API client, event stream, store, keymap, track table,
+  queue, now playing, search, feedback banners and the app shell.
 
-As the daemon and web UI land, extend this with:
+The test harness provides:
 
-- temp XDG config/cache/state directories per test;
-- a mock YouTube client with search/playlist fixtures;
+- a mock YouTube client and no-op download control for API tests;
 - a mock audio sink (no device required);
-- a fake downloader or `yt-dlp` shim;
-- an in-memory/temp database;
-- an API/SSE test client and an MCP mock daemon;
-- Vitest component tests for the web UI.
+- an in-memory event bus and a temp directory for persistence tests;
+- an API/SSE test client;
+- Vitest component tests with a fake EventSource.
 
 ## Regression-test policy
 
@@ -124,6 +132,6 @@ individual curl commands in [docs/api.md](api.md).
 
 ## Current gaps
 
-The daemon, REST/SSE API, MPRIS and systemd/Nix packaging exist. The web UI and
-MCP proxy are still in progress; `just web` is a placeholder until #14, and
-`ytermusicd mcp` exits with a "not implemented" error until #21.
+The daemon, REST/SSE API, web UI, MPRIS and systemd/Nix packaging exist. The
+MCP proxy is still in progress; `ytermusicd mcp` exits with a "not implemented"
+error until #21.
