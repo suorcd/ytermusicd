@@ -29,7 +29,7 @@ UI, MCP proxy and any future TUI are clients.
 | Workspace, daemon skeleton, Nix dev shell | ✅ |
 | Local dev/test workflow (`just`, offline tests) | ✅ |
 | Auth/config/path extraction | ✅ |
-| Playback, queue, event bus, MPRIS | ✅ |
+| Playback, queue, downloads, event bus, MPRIS | ✅ |
 | Full REST + SSE API | ✅ |
 | systemd unit, Nix package/module | ✅ |
 | Web UI | 🚧 in progress |
@@ -163,7 +163,9 @@ curl -N http://127.0.0.1:8080/api/events
 ```
 
 See [docs/api.md](docs/api.md) for every endpoint, request/response shapes,
-error handling, SSE event types and `Last-Event-ID` replay.
+error handling, SSE event types and `Last-Event-ID` replay. Playing a playlist
+or track automatically queues the audio for download; playback starts when the
+cached file is ready, and failed downloads can be retried from the API or UI.
 
 ## MCP
 

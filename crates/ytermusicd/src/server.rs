@@ -26,8 +26,8 @@ use ytermusicd_api::{
     ErrorEnvelope, Event, EventKind, PlayNextRequest, PlayPlaylistRequest, PlayTrackRequest,
     PlaybackSnapshot as ApiPlaybackSnapshot, PlaybackState, Playlist, PlaylistDetail,
     Queue as ApiQueue, QueueItem as ApiQueueItem, QueueRequest, RemoveQueueRequest,
-    ReorderQueueRequest, RepeatMode as ApiRepeatMode, RepeatRequest, SearchResults, SeekRequest,
-    ShuffleRequest, Status, Track, VolumeRequest,
+    ReorderQueueRequest, RepeatMode as ApiRepeatMode, RepeatRequest, RetryDownloadRequest,
+    SearchResults, SeekRequest, ShuffleRequest, Status, Track, VolumeRequest,
 };
 use ytermusicd_core::{
     AudioSink, AuthState as CoreAuthState, AuthStatus, CoreEvent, EventBus, PlaybackCommand,
@@ -35,7 +35,10 @@ use ytermusicd_core::{
     RepeatMode as CoreRepeatMode,
 };
 
-use crate::music::{MusicApi, core_track};
+use crate::{
+    downloads::DownloadControl,
+    music::{MusicApi, core_track},
+};
 
 pub struct AppState<S: AudioSink + Send + 'static> {
     started_at: Instant,
@@ -43,7 +46,7 @@ pub struct AppState<S: AudioSink + Send + 'static> {
     music: Arc<dyn MusicApi>,
     playback: Arc<Mutex<PlaybackService<S>>>,
     events: EventBus,
-    downloads: DownloadSummary,
+    downloads: Arc<dyn DownloadControl>,
 }
 
 impl<S: AudioSink + Send + 'static> Clone for AppState<S> {
@@ -54,7 +57,7 @@ impl<S: AudioSink + Send + 'static> Clone for AppState<S> {
             music: self.music.clone(),
             playback: self.playback.clone(),
             events: self.events.clone(),
-            downloads: self.downloads,
+            downloads: self.downloads.clone(),
         }
     }
 }
@@ -65,7 +68,7 @@ impl<S: AudioSink + Send + 'static> AppState<S> {
         music: Arc<dyn MusicApi>,
         playback: Arc<Mutex<PlaybackService<S>>>,
         events: EventBus,
-        downloads: DownloadSummary,
+        downloads: Arc<dyn DownloadControl>,
     ) -> Self {
         Self {
             started_at: Instant::now(),
@@ -153,6 +156,7 @@ pub fn router<S: AudioSink + Send + 'static>(state: AppState<S>) -> Router {
         .route("/api/seek", post(seek))
         .route("/api/shuffle", post(shuffle))
         .route("/api/repeat", post(repeat))
+        .route("/api/downloads/retry", post(retry_download))
         .route("/api/events", get(events))
         .with_state(state)
 }
@@ -234,10 +238,10 @@ async fn play_playlist<S: AudioSink + Send + 'static>(
     if tracks.is_empty() {
         return Err(ApiFailure::bad_request("playlist has no tracks"));
     }
+    let tracks: Vec<_> = tracks.into_iter().map(core_track).collect();
+    state.downloads.queue_playlist(&tracks);
     let mut playback = state.playback.lock().await;
-    playback
-        .play_playlist(tracks.into_iter().map(core_track).collect())
-        .map_err(playback_failure)?;
+    playback.play_playlist(tracks).map_err(playback_failure)?;
     Ok(Json(status_from_parts(
         &state,
         &playback.snapshot(),
@@ -249,10 +253,10 @@ async fn play_track<S: AudioSink + Send + 'static>(
     State(state): State<AppState<S>>,
     Json(request): Json<PlayTrackRequest>,
 ) -> Result<Json<Status>, ApiFailure> {
+    let track = core_track(request.track);
+    state.downloads.queue_tracks(std::slice::from_ref(&track));
     let mut playback = state.playback.lock().await;
-    playback
-        .play_track(core_track(request.track))
-        .map_err(playback_failure)?;
+    playback.play_track(track).map_err(playback_failure)?;
     Ok(Json(status_from_parts(
         &state,
         &playback.snapshot(),
@@ -264,8 +268,10 @@ async fn queue_add<S: AudioSink + Send + 'static>(
     State(state): State<AppState<S>>,
     Json(request): Json<QueueRequest>,
 ) -> Result<Json<ApiQueue>, ApiFailure> {
+    let track = core_track(request.track);
+    state.downloads.queue_tracks(std::slice::from_ref(&track));
     let mut playback = state.playback.lock().await;
-    playback.enqueue(core_track(request.track));
+    playback.enqueue(track);
     Ok(Json(api_queue(&playback.queue_snapshot())))
 }
 
@@ -374,6 +380,20 @@ async fn repeat<S: AudioSink + Send + 'static>(
         &playback.snapshot(),
         &playback.queue_snapshot(),
     )))
+}
+
+async fn retry_download<S: AudioSink + Send + 'static>(
+    State(state): State<AppState<S>>,
+    Json(request): Json<RetryDownloadRequest>,
+) -> Result<StatusCode, ApiFailure> {
+    if state.downloads.retry(&request.video_id) {
+        Ok(StatusCode::ACCEPTED)
+    } else {
+        Err(ApiFailure::not_found(format!(
+            "no queued track with video id {}",
+            request.video_id
+        )))
+    }
 }
 
 async fn queue_clear<S: AudioSink + Send + 'static>(
@@ -507,7 +527,7 @@ pub async fn serve<S: AudioSink + Send + 'static>(
     auth: AuthStatus,
     music: Arc<dyn MusicApi>,
     playback: Arc<Mutex<PlaybackService<S>>>,
-    downloads: DownloadSummary,
+    downloads: Arc<dyn DownloadControl>,
     commands: UnboundedSender<PlaybackCommand>,
     dbus: bool,
 ) -> io::Result<()> {
@@ -577,7 +597,17 @@ fn status_from_parts<S: AudioSink + Send + 'static>(
         auth: api_auth(&state.auth),
         playback: api_playback(playback),
         queue_length: queue.items.len(),
-        downloads: state.downloads,
+        downloads: api_download_summary(state.downloads.summary()),
+    }
+}
+
+fn api_download_summary(summary: download_manager::DownloadSummary) -> DownloadSummary {
+    DownloadSummary {
+        queued: summary.queued,
+        active: summary.active,
+        completed: summary.completed,
+        retrying: summary.retrying,
+        failed: summary.failed,
     }
 }
 
@@ -782,11 +812,49 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct MockDownloads {
+        playlists: std::sync::Mutex<Vec<Vec<String>>>,
+        queued: std::sync::Mutex<Vec<String>>,
+        retryable: bool,
+    }
+
+    impl DownloadControl for MockDownloads {
+        fn queue_playlist(&self, tracks: &[CoreTrack]) {
+            self.playlists
+                .lock()
+                .unwrap()
+                .push(tracks.iter().map(|track| track.video_id.clone()).collect());
+        }
+
+        fn queue_tracks(&self, tracks: &[CoreTrack]) {
+            self.queued
+                .lock()
+                .unwrap()
+                .extend(tracks.iter().map(|track| track.video_id.clone()));
+        }
+
+        fn retry(&self, _video_id: &str) -> bool {
+            self.retryable
+        }
+
+        fn summary(&self) -> download_manager::DownloadSummary {
+            download_manager::DownloadSummary::default()
+        }
+    }
+
     fn test_state() -> AppState<MockSink> {
         test_state_with(Arc::new(MockMusicApi))
     }
 
     fn test_state_with(music: Arc<dyn MusicApi>) -> AppState<MockSink> {
+        test_state_with_downloads(music, Arc::new(MockDownloads::default()))
+    }
+
+    fn test_state_with_downloads(
+        music: Arc<dyn MusicApi>,
+        downloads: Arc<dyn DownloadControl>,
+    ) -> AppState<MockSink> {
         let service = PlaybackService::new(MockSink, "/tmp/ytermusicd-test");
         let events = service.events();
         let playback = Arc::new(Mutex::new(service));
@@ -795,7 +863,7 @@ mod tests {
             music,
             playback,
             events,
-            DownloadSummary::default(),
+            downloads,
         )
     }
 
@@ -1061,7 +1129,9 @@ mod tests {
             .json()
             .await
             .unwrap();
-        assert_eq!(seeked["playback"]["position_secs"], 42.5);
+        assert_eq!(seeked["playback"]["state"], "playing");
+        let position = seeked["playback"]["position_secs"].as_f64().unwrap();
+        assert!((position - 42.5).abs() < 1.0, "position was {position}");
 
         let shuffled: serde_json::Value = client
             .post(format!("{base}/api/shuffle"))
@@ -1176,6 +1246,82 @@ mod tests {
                 .unwrap()
                 .contains("upstream unavailable")
         );
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn commands_queue_downloads() {
+        let downloads = Arc::new(MockDownloads::default());
+        let (base, server) = start_server(test_state_with_downloads(
+            Arc::new(MockMusicApi),
+            downloads.clone(),
+        ))
+        .await;
+        let client = reqwest::Client::new();
+
+        client
+            .post(format!("{base}/api/play/playlist"))
+            .json(&PlayPlaylistRequest {
+                playlist_id: "p1".to_string(),
+            })
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            downloads.playlists.lock().unwrap()[0],
+            vec!["v1".to_string(), "v2".to_string()]
+        );
+
+        client
+            .post(format!("{base}/api/queue"))
+            .json(&QueueRequest { track: track("v3") })
+            .send()
+            .await
+            .unwrap();
+        client
+            .post(format!("{base}/api/play/track"))
+            .json(&PlayTrackRequest { track: track("v9") })
+            .send()
+            .await
+            .unwrap();
+
+        let queued = downloads.queued.lock().unwrap().clone();
+        assert!(queued.contains(&"v3".to_string()));
+        assert!(queued.contains(&"v9".to_string()));
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn retry_download_accepts_known_tracks_and_rejects_unknown() {
+        let downloads = Arc::new(MockDownloads {
+            retryable: true,
+            ..MockDownloads::default()
+        });
+        let (base, server) =
+            start_server(test_state_with_downloads(Arc::new(MockMusicApi), downloads)).await;
+        let client = reqwest::Client::new();
+
+        let accepted = client
+            .post(format!("{base}/api/downloads/retry"))
+            .json(&RetryDownloadRequest {
+                video_id: "v1".to_string(),
+            })
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), reqwest::StatusCode::ACCEPTED);
+        server.abort();
+
+        let (base, server) = start_server(test_state()).await;
+        let missing = client
+            .post(format!("{base}/api/downloads/retry"))
+            .json(&RetryDownloadRequest {
+                video_id: "missing".to_string(),
+            })
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(missing.status(), reqwest::StatusCode::NOT_FOUND);
         server.abort();
     }
 

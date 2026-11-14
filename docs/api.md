@@ -63,6 +63,7 @@ Every non-2xx response uses one envelope:
 | POST | `/api/seek` | Seek to `position_secs` |
 | POST | `/api/shuffle` | Enable/disable shuffle |
 | POST | `/api/repeat` | Set repeat mode (`off`, `one`, `all`) |
+| POST | `/api/downloads/retry` | Retry a failed download (`{video_id}`) |
 | GET | `/api/events` | SSE snapshot and live events |
 
 Command endpoints return the updated `Status` or `Queue` so clients can render
@@ -175,6 +176,10 @@ curl -X POST http://127.0.0.1:8080/api/shuffle \
   -H 'content-type: application/json' -d '{"enabled":true}'
 curl -X POST http://127.0.0.1:8080/api/repeat \
   -H 'content-type: application/json' -d '{"repeat":"all"}'
+
+# Retry a failed download
+curl -X POST http://127.0.0.1:8080/api/downloads/retry \
+  -H 'content-type: application/json' -d '{"video_id":"abc123"}'
 ```
 
 Queue snapshots look like:
@@ -202,6 +207,13 @@ Queue snapshots look like:
 Invalid indices, negative seek positions and empty searches return 400. Volume
 values above 100 are clamped to 100. Pause and resume are idempotent when the
 daemon is stopped.
+
+Playing a playlist or track, and enqueueing a track, automatically queue the
+audio for download. If the file is not cached yet, the track stays selected but
+playback waits for the `download` event with `state: "downloaded"`; it then
+starts automatically. Failed downloads emit an `error` event and expose the
+`failed` count in `/api/status`. `POST /api/downloads/retry` returns `202`
+for a track the daemon has seen, or `404` for an unknown video id.
 
 ## SSE: `GET /api/events`
 

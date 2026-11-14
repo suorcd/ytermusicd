@@ -193,6 +193,12 @@ pub struct RepeatRequest {
     pub repeat: RepeatMode,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct RetryDownloadRequest {
+    pub video_id: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct VolumeRequest {
