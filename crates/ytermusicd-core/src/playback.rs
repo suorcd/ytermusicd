@@ -5,7 +5,7 @@ use crate::{
 };
 use std::{
     path::{Path, PathBuf},
-    time::Duration,
+    time::{Duration, Instant},
 };
 use thiserror::Error;
 
@@ -65,10 +65,13 @@ pub struct PlaybackService<S: AudioSink> {
     queue: Queue,
     status: PlaybackStatus,
     position: Duration,
+    started_at: Option<Instant>,
     volume: u8,
     sink: S,
     cache_dir: PathBuf,
     events: EventBus,
+    wait_for_downloads: bool,
+    pending_start: bool,
 }
 
 impl<S: AudioSink> PlaybackService<S> {
@@ -82,11 +85,21 @@ impl<S: AudioSink> PlaybackService<S> {
             queue,
             status: PlaybackStatus::Stopped,
             position: Duration::ZERO,
+            started_at: None,
             volume: 50,
             sink,
             cache_dir: cache_dir.into(),
             events,
+            wait_for_downloads: false,
+            pending_start: false,
         }
+    }
+
+    /// When enabled, tracks that are not in the download cache yet are queued
+    /// for download and started automatically once the `Downloaded` status
+    /// arrives. Tests and non-downloading clients leave this disabled.
+    pub fn set_wait_for_downloads(&mut self, enabled: bool) {
+        self.wait_for_downloads = enabled;
     }
 
     pub fn events(&self) -> EventBus {
@@ -98,21 +111,40 @@ impl<S: AudioSink> PlaybackService<S> {
             status: self.status,
             current_index: self.queue.current_index(),
             current: self.queue.current_track().cloned(),
-            position_secs: self.position.as_secs_f64(),
+            position_secs: self.current_position().as_secs_f64(),
             volume: self.volume,
             repeat: self.queue.repeat(),
             shuffle: self.queue.shuffle(),
         }
     }
 
+    /// Current position, including the time elapsed since the last play,
+    /// resume or seek.
+    pub fn current_position(&self) -> Duration {
+        match self.started_at {
+            Some(started_at) => self.position + started_at.elapsed(),
+            None => self.position,
+        }
+    }
+
+    fn freeze_position(&mut self) {
+        self.position = self.current_position();
+        self.started_at = None;
+    }
+
     pub fn queue_snapshot(&self) -> crate::model::QueueSnapshot {
         self.queue.snapshot()
     }
 
-    /// Poll the audio sink and advance automatically when a track ends.
+    /// Poll the audio sink, publish progress and advance automatically when a
+    /// track ends.
     pub fn tick(&mut self) -> Result<(), PlaybackError> {
-        if self.status == PlaybackStatus::Playing && self.sink.is_finished() {
-            self.on_track_finished()?;
+        if self.status == PlaybackStatus::Playing {
+            if self.sink.is_finished() {
+                self.on_track_finished()?;
+            } else {
+                self.publish_playback();
+            }
         }
         Ok(())
     }
@@ -144,7 +176,7 @@ impl<S: AudioSink> PlaybackService<S> {
             PlaybackCommand::Previous => self.previous_track(),
             PlaybackCommand::Seek(position) => self.seek(position),
             PlaybackCommand::SeekBy(delta) => {
-                let position = (self.position.as_secs_f64() + delta).max(0.0);
+                let position = (self.current_position().as_secs_f64() + delta).max(0.0);
                 self.seek(Duration::from_secs_f64(position))
             }
             PlaybackCommand::SetVolume(volume) => self.set_volume(volume),
@@ -173,7 +205,7 @@ impl<S: AudioSink> PlaybackService<S> {
             repeat: self.queue.repeat(),
             shuffle: self.queue.shuffle(),
             volume: self.volume,
-            position_secs: self.position.as_secs_f64(),
+            position_secs: self.current_position().as_secs_f64(),
         }
     }
 
@@ -196,7 +228,12 @@ impl<S: AudioSink> PlaybackService<S> {
         );
         self.volume = state.volume.min(100);
         self.position = Duration::from_secs_f64(state.position_secs.max(0.0));
+        self.started_at = None;
+        self.pending_start = false;
         self.status = PlaybackStatus::Stopped;
+        self.sink
+            .set_volume(self.volume)
+            .map_err(|error| PlaybackError::Sink(error.to_string()))?;
         self.publish_all();
         Ok(())
     }
@@ -260,6 +297,7 @@ impl<S: AudioSink> PlaybackService<S> {
             self.sink
                 .pause()
                 .map_err(|error| PlaybackError::Sink(error.to_string()))?;
+            self.freeze_position();
             self.status = PlaybackStatus::Paused;
             self.publish_playback();
         }
@@ -271,6 +309,7 @@ impl<S: AudioSink> PlaybackService<S> {
             self.sink
                 .resume()
                 .map_err(|error| PlaybackError::Sink(error.to_string()))?;
+            self.started_at = Some(Instant::now());
             self.status = PlaybackStatus::Playing;
             self.publish_playback();
         }
@@ -316,6 +355,11 @@ impl<S: AudioSink> PlaybackService<S> {
             .seek(position)
             .map_err(|error| PlaybackError::Sink(error.to_string()))?;
         self.position = position;
+        self.started_at = if self.status == PlaybackStatus::Playing {
+            Some(Instant::now())
+        } else {
+            None
+        };
         self.publish_playback();
         Ok(())
     }
@@ -367,6 +411,7 @@ impl<S: AudioSink> PlaybackService<S> {
             .current_track()
             .is_some_and(|track| track.video_id == video_id)
         {
+            self.pending_start = false;
             let _ = self.next_track();
         }
     }
@@ -381,6 +426,17 @@ impl<S: AudioSink> PlaybackService<S> {
             video_id: video_id.to_string(),
             status,
         });
+        if status == common_structs::MusicDownloadStatus::Downloaded
+            && self.pending_start
+            && self
+                .queue
+                .current_track()
+                .is_some_and(|track| track.video_id == video_id)
+        {
+            self.pending_start = false;
+            let _ = self.start_current();
+            return;
+        }
         self.publish_queue();
     }
 
@@ -394,9 +450,20 @@ impl<S: AudioSink> PlaybackService<S> {
             .cache_dir
             .join("downloads")
             .join(format!("{}.mp4", track.video_id));
+        if self.wait_for_downloads && !path.exists() {
+            self.pending_start = true;
+            self.status = PlaybackStatus::Stopped;
+            self.position = Duration::ZERO;
+            self.started_at = None;
+            self.publish_all();
+            return Ok(());
+        }
+
+        self.pending_start = false;
         if let Err(error) = self.sink.play(&track, &path) {
             self.status = PlaybackStatus::Stopped;
             self.position = Duration::ZERO;
+            self.started_at = None;
             let message = error.to_string();
             self.events.publish(CoreEvent::Error {
                 message: message.clone(),
@@ -407,6 +474,7 @@ impl<S: AudioSink> PlaybackService<S> {
 
         self.status = PlaybackStatus::Playing;
         self.position = Duration::ZERO;
+        self.started_at = Some(Instant::now());
         self.sink
             .set_volume(self.volume)
             .map_err(|error| PlaybackError::Sink(error.to_string()))?;
@@ -418,6 +486,8 @@ impl<S: AudioSink> PlaybackService<S> {
         let _ = self.sink.stop();
         self.status = PlaybackStatus::Stopped;
         self.position = Duration::ZERO;
+        self.started_at = None;
+        self.pending_start = false;
         self.publish_all();
     }
 
@@ -705,7 +775,69 @@ mod tests {
         assert_eq!(restored.snapshot().volume, 80);
         assert_eq!(restored.snapshot().repeat, RepeatMode::All);
         assert!(restored.snapshot().shuffle);
-        assert_eq!(restored.snapshot().position_secs, 12.0);
+        let restored_position = restored.snapshot().position_secs;
+        assert!(
+            (restored_position - 12.0).abs() < 0.5,
+            "position was {restored_position}"
+        );
         assert_eq!(restored.snapshot().status, PlaybackStatus::Stopped);
+    }
+
+    #[test]
+    fn playback_position_advances_and_freezes_on_pause() {
+        let mut service = service();
+        service.play_playlist(tracks(1)).unwrap();
+        std::thread::sleep(Duration::from_millis(30));
+        let advanced = service.current_position();
+        assert!(advanced >= Duration::from_millis(20), "{advanced:?}");
+
+        service.pause().unwrap();
+        let frozen = service.snapshot().position_secs;
+        std::thread::sleep(Duration::from_millis(20));
+        assert_eq!(service.current_position().as_secs_f64(), frozen);
+
+        service.resume().unwrap();
+        std::thread::sleep(Duration::from_millis(20));
+        assert!(service.current_position() > Duration::from_secs_f64(frozen));
+    }
+
+    #[test]
+    fn wait_for_downloads_starts_when_file_is_ready() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut service = PlaybackService::new(MockSink::default(), dir.path());
+        service.set_wait_for_downloads(true);
+        service.play_playlist(tracks(1)).unwrap();
+
+        assert_eq!(service.snapshot().status, PlaybackStatus::Stopped);
+        assert_eq!(service.snapshot().current.unwrap().video_id, "video-0");
+        assert!(service.sink.plays.is_empty());
+
+        std::fs::create_dir_all(dir.path().join("downloads")).unwrap();
+        std::fs::write(dir.path().join("downloads/video-0.mp4"), b"audio").unwrap();
+        service.set_download_status("video-0", MusicDownloadStatus::Downloaded);
+
+        assert_eq!(service.snapshot().status, PlaybackStatus::Playing);
+        assert_eq!(service.sink.plays.len(), 1);
+        assert_eq!(service.sink.plays[0].0, "video-0");
+    }
+
+    #[test]
+    fn restore_applies_volume_to_the_sink() {
+        let mut service = service();
+        let state = PersistedState {
+            version: STATE_VERSION,
+            tracks: tracks(1),
+            current: Some(0),
+            repeat: RepeatMode::All,
+            shuffle: false,
+            volume: 80,
+            position_secs: 7.5,
+        };
+        service.restore_state(&state).unwrap();
+
+        assert_eq!(service.snapshot().volume, 80);
+        assert_eq!(service.sink.volume, 80);
+        assert_eq!(service.snapshot().position_secs, 7.5);
+        assert_eq!(service.snapshot().status, PlaybackStatus::Stopped);
     }
 }

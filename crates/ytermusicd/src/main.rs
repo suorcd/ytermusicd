@@ -1,16 +1,19 @@
 use clap::{Parser, Subcommand};
 use std::{path::PathBuf, process::ExitCode, sync::Arc, time::Duration};
-use tokio::sync::{Mutex, mpsc};
-use ytermusicd_api::DownloadSummary;
-use ytermusicd_core::{AuthStatus, DaemonConfig, Paths, PlaybackService, resolve_auth};
+use tokio::sync::{Mutex as AsyncMutex, mpsc};
+use ytermusicd_core::{
+    AuthStatus, DaemonConfig, Downloader as ConfigDownloader, Paths, PlaybackService, resolve_auth,
+};
 
 mod audio;
+mod downloads;
 mod mpris;
 mod music;
 mod server;
 
 use crate::{
     audio::RodioSink,
+    downloads::{DownloadControl, DownloadService},
     music::{MusicApi, UnavailableMusicApi, YoutubeMusicApi},
 };
 
@@ -119,7 +122,16 @@ fn run_serve(
     };
 
     let dbus = config.dbus;
+    let parallel_downloads = config.parallel_downloads;
+    let downloader = match config.downloader {
+        ConfigDownloader::Ytdlp => download_manager::Downloader::YtDlp,
+        ConfigDownloader::RustyYtdl => {
+            log::warn!("rusty-ytdl backend requested but not compiled; using yt-dlp");
+            download_manager::Downloader::YtDlp
+        }
+    };
     let cache_dir = paths.cache_dir.clone();
+    let state_path = paths.state_file();
     log::info!("starting ytermusicd serve on {bind}:{port}");
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -141,41 +153,92 @@ fn run_serve(
         };
 
         let sink = RodioSink::spawn();
-        let playback = Arc::new(Mutex::new(PlaybackService::new(sink, cache_dir)));
+        let playback = Arc::new(AsyncMutex::new(PlaybackService::new(
+            sink,
+            cache_dir.clone(),
+        )));
+        {
+            let mut service = playback.lock().await;
+            match service.load_state(&state_path) {
+                Ok(()) => log::info!("restored playback state from {}", state_path.display()),
+                Err(error) => {
+                    log::warn!(
+                        "could not restore {}: {error}; starting with empty state",
+                        state_path.display()
+                    );
+                    let backup = state_path.with_extension("json.bad");
+                    let _ = std::fs::rename(&state_path, backup);
+                }
+            }
+            service.set_wait_for_downloads(true);
+        }
+
+        let downloads = DownloadService::new(cache_dir, parallel_downloads, downloader);
+        downloads.spawn(playback.clone());
+        let restored_tracks: Vec<ytermusicd_core::Track> = playback
+            .lock()
+            .await
+            .queue_snapshot()
+            .items
+            .into_iter()
+            .map(|item| item.track)
+            .collect();
+        if !restored_tracks.is_empty() {
+            downloads.queue_playlist(&restored_tracks);
+        }
+        let downloads: Arc<dyn DownloadControl> = Arc::new(downloads);
+
         let (commands, mut command_rx) = mpsc::unbounded_channel();
         let command_playback = playback.clone();
+        let command_state_path = state_path.clone();
         tokio::spawn(async move {
             while let Some(command) = command_rx.recv().await {
                 let mut service = command_playback.lock().await;
                 if let Err(error) = service.handle_command(command) {
                     log::warn!("playback command failed: {error:?}");
                 }
+                if let Err(error) = service.save_state(&command_state_path) {
+                    log::warn!("could not save playback state: {error}");
+                }
             }
         });
 
         let tick_playback = playback.clone();
+        let tick_state_path = state_path.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_millis(500));
+            let mut ticks = 0u32;
             loop {
                 interval.tick().await;
                 let mut service = tick_playback.lock().await;
                 if let Err(error) = service.tick() {
                     log::warn!("playback tick failed: {error:?}");
                 }
+                ticks = ticks.wrapping_add(1);
+                if ticks.is_multiple_of(10)
+                    && let Err(error) = service.save_state(&tick_state_path)
+                {
+                    log::warn!("could not save playback state: {error}");
+                }
             }
         });
 
-        server::serve(
+        let serve_playback = playback.clone();
+        let result = server::serve(
             &bind,
             port,
             auth_status,
             music,
-            playback,
-            DownloadSummary::default(),
+            serve_playback,
+            downloads,
             commands,
             dbus,
         )
-        .await
+        .await;
+        if let Err(error) = playback.lock().await.save_state(&state_path) {
+            log::warn!("could not save playback state on shutdown: {error}");
+        }
+        result
     })
 }
 

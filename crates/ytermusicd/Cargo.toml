@@ -11,6 +11,8 @@ async-trait = "0.1"
 axum = "0.8"
 clap = { version = "4.5", features = ["derive", "env"] }
 common-structs.workspace = true
+database.workspace = true
+download-manager.workspace = true
 env_logger = "0.11"
 flume = "0.11"
 futures-util = "0.3"

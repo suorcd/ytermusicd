@@ -6604,6 +6604,8 @@ dependencies = [
  "axum",
  "clap",
  "common-structs",
+ "database",
+ "download-manager",
  "env_logger",
  "flume",
  "futures-util",

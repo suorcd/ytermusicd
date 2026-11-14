@@ -60,13 +60,25 @@ track.
   `account_id.txt`; never committed or logged.
 - **Cache**: downloaded `<video-id>.mp4` and `<video-id>.json` files plus
   `db.bin`.
-- Runtime state (#18): queue, current index, position, volume, shuffle/repeat,
-  written atomically and restored on startup.
+- Runtime state: queue, current index, position, volume, shuffle/repeat,
+  written atomically after commands, periodically while the daemon runs and on
+  shutdown, then restored on startup (invalid state is quarantined as
+  `state.json.bad`).
 - **Legacy**: `last-playlist.json` from the TUI.
 
 The daemon uses the `com/suorcd/ytermusicd` directories and falls back to the
 legacy `com/ccgauche/ytermusic` headers file with a warning. The legacy TUI
 keeps its existing cache/config directories.
+
+## Downloads
+
+The daemon owns a `DownloadManager` with `parallel_downloads` workers. Playing
+a playlist or track and enqueueing a track records the metadata and adds the
+audio to the download queue. Playback waits for the cache file to appear and
+starts automatically when the manager emits `Downloaded`; failures skip to the
+next track and surface an error event. `/api/status` reports queued/active/
+completed/retrying/failed counts, and `/api/downloads/retry` re-queues a failed
+track. The web UI and MCP proxy never download directly.
 
 ## API
 

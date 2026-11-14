@@ -183,17 +183,15 @@ impl DownloadManager {
         list.clear();
         list.extend(to_add);
         drop(list);
-        self.notify.notify_one();
+        // Wake every idle worker so `parallel_downloads` is actually used.
+        self.notify.notify_waiters();
     }
 
     pub fn add_to_download_list(&self, to_add: impl IntoIterator<Item = YoutubeMusicVideoRef>) {
         let mut list = self.download_list.lock().unwrap();
-        let was_empty = list.is_empty();
         list.extend(to_add);
         drop(list);
-        if was_empty {
-            self.notify.notify_one();
-        }
+        self.notify.notify_waiters();
     }
 
     fn set_status(&self, video_id: &str, status: MusicDownloadStatus) {
