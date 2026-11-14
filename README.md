@@ -1,9 +1,9 @@
 # ytermusicd
 
-> **Work in progress.** `ytermusicd` is a headless daemon fork of
+> **v0.1.0.** `ytermusicd` is a headless daemon fork of
 > [ytermusic](https://github.com/ccgauche/ytermusic), adding a web UI, MPRIS and
-> MCP. The daemon, REST/SSE API, web UI, MPRIS and packaging work today; the MCP
-> proxy is in progress.
+> MCP. The daemon, REST/SSE API, web UI, MPRIS, MCP and packaging work today.
+> Playlist editing is post-v1 ([#51](https://github.com/suorcd/ytermusicd/issues/51)).
 
 [Build plan](https://sb.ser.ink/llm-wiki/concepts/ytermusicd-build-plan) ·
 [Roadmap](https://github.com/suorcd/ytermusicd/issues/25) ·
@@ -15,7 +15,7 @@
 daemon. Clients are thin:
 
 - **Web UI** — library, search, queue, now playing and vim-style keys.
-- **MCP** (planned) — a stdio proxy exposing search/playback tools to assistants.
+- **MCP** — a stdio proxy exposing search/playback tools to assistants.
 - **MPRIS** — desktop media controls (`playerctl`, shell media widgets).
 - **Legacy TUI** — the existing `ytermusic` client remains available.
 
@@ -33,8 +33,8 @@ UI, MCP proxy and any future TUI are clients.
 | Full REST + SSE API | ✅ |
 | Web UI (library, search, queue, now playing, vim keys) | ✅ |
 | systemd unit, Nix package/module | ✅ |
-| MCP proxy | 🚧 in progress |
-| First release | Planned |
+| MCP proxy (13 tools) | ✅ |
+| v0.1.0 release | ✅ |
 
 See the [roadmap](https://github.com/suorcd/ytermusicd/issues/25) for the
 ordered backlog.
@@ -121,6 +121,7 @@ defaults. CLI flags and environment variables override the config file:
 | `--port` | `YTERMUSICD_PORT` |
 | `--headers` | `YTERMUSICD_HEADERS` |
 | `--config` | `YTERMUSICD_CONFIG` |
+| `--url` (`mcp` only) | `YTERMUSICD_URL` |
 
 `config.toml` parse errors, invalid values and malformed headers are reported
 with the file path; they are never silently replaced with defaults.
@@ -136,6 +137,9 @@ just test
 - [docs/testing.md](docs/testing.md) — local workflow, fixtures, regression policy
 - [docs/api.md](docs/api.md) — REST/SSE reference, curl examples and reconnect semantics
 - [docs/web.md](docs/web.md) — web UI development, keymap and failure states
+- [docs/mcp.md](docs/mcp.md) — MCP client setup and the 13 v1 tools
+- [docs/release.md](docs/release.md) — release checklist and smoke tests
+- [CHANGELOG.md](CHANGELOG.md) — release notes
 - [CONTRIBUTING.md](CONTRIBUTING.md) — contribution rules
 - [AGENTS.md](AGENTS.md) — worktree-per-issue workflow for agents
 - [docs/architecture.md](docs/architecture.md) — daemon/API/client design
@@ -145,7 +149,7 @@ just test
 
 ### Workspace layout
 
-- `crates/ytermusicd` — daemon binary (`serve`, `mcp`; in progress)
+- `crates/ytermusicd` — daemon binary (`serve`, `mcp`)
 - `crates/ytermusicd-core` — headless paths, config, auth, playback/queue and event bus
 - `crates/ytermusicd-api` — shared DTOs and generated TypeScript bindings
 - `crates/ytermusicd-web` — Svelte 5 web UI (embedded in the daemon)
@@ -175,8 +179,57 @@ The daemon serves the web UI at `/` and the API under `/api`.
 
 ## MCP
 
-`ytermusicd mcp` will be a stdio proxy to the daemon (issue #21). It is not
-implemented yet.
+`ytermusicd mcp` is a stdio proxy to the daemon. It exposes 13 tools:
+`search`, `list_playlists`, `get_playlist`, `play_playlist`, `play_track`,
+`queue_add`, `now_playing`, `pause`, `resume`, `next`, `previous`, `volume` and
+`download_status`.
+
+```sh
+ytermusicd mcp
+YTERMUSICD_URL=http://127.0.0.1:9000 ytermusicd mcp
+```
+
+See [docs/mcp.md](docs/mcp.md) for client configuration, tool arguments and
+error behavior. Playlist editing, lyrics and HTTP transport are post-v1.
+
+## Troubleshooting
+
+**The daemon exits with a cookie or `SAPISID` error.** Refresh `headers.txt`.
+See [Authentication](#authentication). The daemon never prompts on stdin.
+
+**The API returns 502.** YouTube Music rejected the request. Check the cookie,
+the network and the daemon log. The web UI shows the message in a toast.
+
+**The web UI shows "not built".** Run `just web-install && just web-check`.
+Then restart the daemon.
+
+**There is no audio.** Check the ALSA or PipeWire device. Run `aplay -l` and
+check the daemon log. The first start can wait for a download.
+
+**MPRIS does not appear in `playerctl -l`.** Check the D-Bus session and set
+`dbus = true` in `config.toml`. The daemon continues without MPRIS if D-Bus is
+not available.
+
+**The port is in use.** Set `--port` or `YTERMUSICD_PORT`.
+
+**A state file is corrupt.** The daemon moves it to `state.json.bad` and starts
+with an empty queue. A log line shows the path.
+
+**More logs.** Set `RUST_LOG=ytermusicd=debug`.
+
+## Migrating from ytermusic
+
+The legacy TUI and the daemon use different XDG directories. The daemon reads a
+legacy `com/ccgauche/ytermusic/headers.txt` with a warning. It does not import
+the TUI playlist file or the TUI queue. Downloaded files are not moved.
+
+To migrate:
+
+1. Copy the cookie headers to `$XDG_CONFIG_HOME/ytermusicd/headers.txt`.
+2. Copy downloaded files to `$XDG_CACHE_HOME/ytermusicd/downloads/`.
+3. Start the daemon and select a playlist in the web UI.
+
+The legacy `ytermusic` binary still works.
 
 ## Legacy TUI
 

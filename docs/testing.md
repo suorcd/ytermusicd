@@ -21,6 +21,7 @@ nix develop
 | `just web` | Run the Vite dev server with an `/api` proxy |
 | `just web-check` | Type-check and build the web UI |
 | `just smoke` | Smoke-test a running daemon (`scripts/smoke.sh`) |
+| `just smoke-local` | Start a temporary daemon and smoke-test it (`scripts/smoke-local.sh`) |
 
 `just` is provided by the Nix dev shell and listed in the README prerequisites
 for non-Nix setups.
@@ -103,10 +104,10 @@ Every push and pull request runs `.github/workflows/ci.yml`:
 - `cargo check --workspace --all-targets`
 - `cargo test --workspace`
 
-The `web` job detects `crates/ytermusicd-web/package.json` and builds the web UI
-once that crate exists. The release workflow builds `ytermusicd` for Linux,
-Windows and macOS, bundles web assets when present, publishes SHA-256
-checksums, and can be dry-run with `workflow_dispatch`.
+The `web` job installs Node 22, runs `npm ci`, `npm run check`, `npm test` and
+`npm run build`. The release workflow builds the web UI before the Rust binary,
+embeds the assets, publishes SHA-256 checksums, and can be dry-run with
+`workflow_dispatch`.
 
 ## Smoke tests
 
@@ -126,12 +127,21 @@ YTERMUSICD_URL=http://127.0.0.1:8080 ./scripts/smoke.sh
 
 The script checks `/api/status`, search, at least one SSE event, and MPRIS via
 `playerctl` when available. The daemon must have valid headers for the search
-check; without them it returns 502 and the smoke test fails. Run it against a
-daemon started with temporary state, or skip the search check by inspecting the
-individual curl commands in [docs/api.md](api.md).
+check; without them it returns 502 and the smoke test fails.
+
+For a complete local smoke test, use a temporary daemon and real headers:
+
+```sh
+YTERMUSICD_HEADERS="$HOME/.config/ytermusicd/headers.txt" just smoke-local
+```
+
+`smoke-local` builds the binary, starts it on an ephemeral port with temporary
+XDG directories, then checks status, the web page, search, SSE and the MCP
+`tools/list` response. It stops the daemon and deletes the temporary files.
 
 ## Current gaps
 
-The daemon, REST/SSE API, web UI, MPRIS and systemd/Nix packaging exist. The
-MCP proxy is still in progress; `ytermusicd mcp` exits with a "not implemented"
-error until #21.
+The daemon, REST/SSE API, web UI, MPRIS, MCP and systemd/Nix packaging exist.
+Playlist editing is post-v1. See
+[#51](https://github.com/suorcd/ytermusicd/issues/51) and
+[decision 0005](decisions/0005-playlist-editing.md).
