@@ -80,8 +80,11 @@ const DEFAULT_SEARCH_DEBOUNCE = 250;
 const PLAYBACK_WATCH_INTERVAL_MS = 1000;
 /// Silence after which a playing track re-reads its position from the daemon.
 const PLAYBACK_STALE_REFRESH_MS = 2000;
-/// Silence after which a playing track rebuilds the event stream.
-const PLAYBACK_STALE_RETRY_MS = 5000;
+/// Silence before the first rebuild of a stalled event stream.
+const PLAYBACK_STALE_RETRY_BASE_MS = 5000;
+/// Longest silence before a rebuild. The threshold doubles after each
+/// silent rebuild, up to this cap.
+const PLAYBACK_STALE_RETRY_MAX_MS = 60000;
 
 export function reorderQueue(queue: Queue, from: number, to: number): Queue {
   const items = [...queue.items];
@@ -167,6 +170,7 @@ export class AppStore {
   private lastPlaybackEventMs: number | null = null;
   private playbackStaleRefreshed = false;
   private playbackStaleRetried = false;
+  private playbackStaleRetryCount = 0;
 
   constructor(api: YtermusicdApi = createApi(), options: StoreOptions = {}) {
     this.api = api;
@@ -1252,16 +1256,20 @@ export class AppStore {
   /// Record a playback event from the stream. Only stream events move
   /// this clock: a REST status refresh must not hide a dead stream.
   /// The daemon publishes a playback event every 500 ms while it plays,
-  /// so 2 s without one means the stream stopped.
+  /// so 2 s without one means the stream stopped. A real event also
+  /// proves the stream is healthy, so it resets the retry backoff.
   private notePlaybackEvent(): void {
     this.lastPlaybackEventMs = Date.now();
     this.playbackStaleRefreshed = false;
     this.playbackStaleRetried = false;
+    this.playbackStaleRetryCount = 0;
     this.updatePlaybackWatch();
   }
 
   /// Start a new watch period after a reconnect. The old silence no
-  /// longer counts against the new connection.
+  /// longer counts against the new connection. A reconnect alone does
+  /// not reset the retry backoff: only a playback event proves the
+  /// new stream publishes, so a silent rebuild keeps the longer wait.
   private resetPlaybackWatch(): void {
     this.lastPlaybackEventMs = Date.now();
     this.playbackStaleRefreshed = false;
@@ -1270,13 +1278,15 @@ export class AppStore {
   }
 
   /// Run the watchdog only while playback runs. Pause, stop, and
-  /// dispose clear it.
+  /// dispose clear it. A fresh episode starts with the first retry
+  /// threshold, so a pause also resets the retry backoff.
   private updatePlaybackWatch(): void {
     if (this.status?.playback.state !== 'playing') {
       this.clearPlaybackWatchTimer();
       this.lastPlaybackEventMs = null;
       this.playbackStaleRefreshed = false;
       this.playbackStaleRetried = false;
+      this.playbackStaleRetryCount = 0;
       return;
     }
     if (this.lastPlaybackEventMs === null) this.lastPlaybackEventMs = Date.now();
@@ -1302,11 +1312,24 @@ export class AppStore {
     }
   }
 
+  /// Silence before the next stream rebuild. The threshold doubles
+  /// after each rebuild that brings no playback event, up to the cap.
+  /// A silent stream is rebuilt less often instead of every 5 s.
+  private playbackStaleRetryMs(): number {
+    return Math.min(
+      PLAYBACK_STALE_RETRY_BASE_MS * 2 ** this.playbackStaleRetryCount,
+      PLAYBACK_STALE_RETRY_MAX_MS,
+    );
+  }
+
   /// Check a playing track for stalled playback events. At 2 s without
   /// an event, re-read the status: the daemon computes the live position
   /// from the audio clock, so the bar advances again. At 5 s without
-  /// an event, rebuild the stream. Each step runs once per watch
-  /// period, until a new event or a reconnect starts a new period.
+  /// an event, rebuild the stream for the first time. Later rebuilds
+  /// wait longer: the threshold doubles after each silent rebuild, up
+  /// to 60 s. A playback event resets the threshold to 5 s. Each step
+  /// runs once per watch period, until a new event or a reconnect
+  /// starts a new period.
   private checkPlaybackStaleness(): void {
     const playback = this.status?.playback;
     if (!playback || playback.state !== 'playing' || this.lastPlaybackEventMs === null) {
@@ -1314,8 +1337,9 @@ export class AppStore {
       return;
     }
     const silentMs = Date.now() - this.lastPlaybackEventMs;
-    if (silentMs >= PLAYBACK_STALE_RETRY_MS && !this.playbackStaleRetried) {
+    if (silentMs >= this.playbackStaleRetryMs() && !this.playbackStaleRetried) {
       this.playbackStaleRetried = true;
+      this.playbackStaleRetryCount += 1;
       this.events.retry();
       return;
     }

@@ -192,6 +192,139 @@ describe('AppStore', () => {
     store.dispose();
   });
 
+  it('backs off stream retries when rebuilt streams stay silent', async () => {
+    const { api, store, sources } = setup();
+    api.status = vi.fn(async () =>
+      makeStatus({
+        playback: {
+          state: 'playing',
+          current: makeTrack('v1'),
+          position_secs: 12,
+          volume: 50,
+          repeat: 'off',
+          shuffle: false,
+        },
+      }),
+    );
+    await store.init();
+
+    sources[0].open();
+    const playing = {
+      type: 'playback',
+      playback: {
+        state: 'playing',
+        current: makeTrack('v1'),
+        position_secs: 12,
+        volume: 50,
+        repeat: 'off',
+        shuffle: false,
+      },
+    };
+    sources[0].emit(playing);
+
+    // The rebuilt stream sends heartbeats but no playback events, so
+    // the watchdog stays quiet and only the store retry rebuilds it.
+    // Advance in 5 s steps and heartbeat the newest source each step.
+    const heartbeatNewest = () => {
+      const current = sources[sources.length - 1];
+      if (!current.closed) current.emitNamed('heartbeat', {});
+    };
+    const advanceSilent = async (ms: number) => {
+      for (let t = 0; t < ms; t += 5000) {
+        await vi.advanceTimersByTimeAsync(5000);
+        heartbeatNewest();
+      }
+    };
+
+    // First retry still fires at 5 s.
+    await advanceSilent(5000);
+    expect(sources).toHaveLength(2);
+    sources[1].open();
+
+    // Second retry waits 10 s, not 5 s.
+    await advanceSilent(5000);
+    expect(sources).toHaveLength(2);
+    await advanceSilent(5000);
+    expect(sources).toHaveLength(3);
+    sources[2].open();
+
+    // Third retry waits 20 s.
+    await advanceSilent(10000);
+    expect(sources).toHaveLength(3);
+    await advanceSilent(10000);
+    expect(sources).toHaveLength(4);
+    sources[3].open();
+
+    // Fourth retry waits 40 s.
+    await advanceSilent(20000);
+    expect(sources).toHaveLength(4);
+    await advanceSilent(20000);
+    expect(sources).toHaveLength(5);
+    sources[4].open();
+
+    // The threshold caps at 60 s.
+    await advanceSilent(30000);
+    expect(sources).toHaveLength(5);
+    await advanceSilent(30000);
+    expect(sources).toHaveLength(6);
+    store.dispose();
+  });
+
+  it('resets the retry backoff when a rebuilt stream publishes again', async () => {
+    const { api, store, sources } = setup();
+    api.status = vi.fn(async () =>
+      makeStatus({
+        playback: {
+          state: 'playing',
+          current: makeTrack('v1'),
+          position_secs: 12,
+          volume: 50,
+          repeat: 'off',
+          shuffle: false,
+        },
+      }),
+    );
+    await store.init();
+
+    sources[0].open();
+    const playing = {
+      type: 'playback',
+      playback: {
+        state: 'playing',
+        current: makeTrack('v1'),
+        position_secs: 12,
+        volume: 50,
+        repeat: 'off',
+        shuffle: false,
+      },
+    };
+    sources[0].emit(playing);
+
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(sources).toHaveLength(2);
+    sources[1].open();
+
+    // The rebuilt stream recovers: a playback event resets the
+    // backoff, so the next silence retries at 5 s again, not 10 s.
+    sources[1].emit({
+      type: 'playback',
+      playback: {
+        state: 'playing',
+        current: makeTrack('v1'),
+        position_secs: 13,
+        volume: 50,
+        repeat: 'off',
+        shuffle: false,
+      },
+    });
+
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(sources).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(sources).toHaveLength(3);
+    store.dispose();
+  });
+
   it('does not start the fallback timer when paused', async () => {
     const { api, store, sources } = setup();
     api.status = vi.fn(async () =>
